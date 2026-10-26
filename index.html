@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>测试场景</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #1c1c1c;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  canvas {
+    width: min(100vw, 2048px, calc(100vh * 16 / 9));
+    aspect-ratio: 16 / 9;
+    display: block;
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script src="info/info.js"></script>
+<script src="scenes/menu.js"></script>
+<script src="scenes/test.js"></script>
+<script src="save.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+{
+  "slot": "test1",
+  "clock": 0,
+  "wave": 0,
+  "waveGap": 19000,
+  "waveHp": 0,
+  "bigWarned": false,
+  "banners": [],
+  "rowLast": [
+    2,
+    2,
+    2,
+    2,
+    2
+  ],
+  "rowSecondLast": [
+    2,
+    2,
+    2,
+    2,
+    2
+  ],
+  "lastSpawn": 0,
+  "lastMilk": 0,
+  "milkInterval": 6331.39410529869,
+  "milkDropped": 0,
+  "milk": 50,
+  "milkShown": 50,
+  "cool": [
+    0,
+    0,
+    33.33333333333333,
+    20,
+    0,
+    0
+  ],
+  "opts": {
+    "fast": false,
+    "noNatural": false,
+    "noCool": false,
+    "autoCollect": false
+  },
+  "plants": [],
+  "bullets": [],
+  "milks": [],
+  "effects": [],
+  "gmilks": [
+    {
+      "row": 0,
+      "x": 113.59999999999977,
+      "launched": false
+    },
+    {
+      "row": 1,
+      "x": 113.59999999999977,
+      "launched": false
+    },
+    {
+      "row": 2,
+      "x": 113.59999999999977,
+      "launched": false
+    },
+    {
+      "row": 3,
+      "x": 113.59999999999977,
+      "launched": false
+    },
+    {
+      "row": 4,
+      "x": 113.59999999999977,
+      "launched": false
+    }
+  ],
+  "bgmAt": 0,
+  "monsters": []
+}

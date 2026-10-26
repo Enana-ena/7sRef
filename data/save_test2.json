@@ -1,0 +1,89 @@
+{
+  "slot": "test2",
+  "clock": 5127.799999999999,
+  "wave": 0,
+  "waveGap": 19000,
+  "waveHp": 0,
+  "bigWarned": false,
+  "banners": [],
+  "rowLast": [
+    2,
+    2,
+    2,
+    2,
+    2
+  ],
+  "rowSecondLast": [
+    2,
+    2,
+    2,
+    2,
+    2
+  ],
+  "lastSpawn": 0,
+  "lastMilk": 0,
+  "milkInterval": 5306.455146826185,
+  "milkDropped": 0,
+  "milk": 0,
+  "milkShown": 0,
+  "deck": [
+    2,
+    0,
+    1,
+    3,
+    4,
+    5
+  ],
+  "cool": [
+    28.205533333333374,
+    0,
+    4.272200000000117,
+    14.872199999999877,
+    0,
+    0
+  ],
+  "plants": [
+    {
+      "row": 1,
+      "col": 1,
+      "card": 1,
+      "atkT": 0,
+      "prodT": 6.658942261893498,
+      "lifeT": 0,
+      "placeT": 0,
+      "hp": 300
+    }
+  ],
+  "bullets": [],
+  "milks": [],
+  "effects": [],
+  "gmilks": [
+    {
+      "row": 0,
+      "x": 113.59999999999977,
+      "launched": false
+    },
+    {
+      "row": 1,
+      "x": 113.59999999999977,
+      "launched": false
+    },
+    {
+      "row": 2,
+      "x": 113.59999999999977,
+      "launched": false
+    },
+    {
+      "row": 3,
+      "x": 113.59999999999977,
+      "launched": false
+    },
+    {
+      "row": 4,
+      "x": 113.59999999999977,
+      "launched": false
+    }
+  ],
+  "bgmAt": 4.844342,
+  "monsters": []
+}
