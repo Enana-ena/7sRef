@@ -198,13 +198,22 @@ const INFO = {
     prs: { name: 'prs', hp: 370, img: 'images/others/difficulty-Present.png', scale: 0.54, dx: 0, dy: -193 },
     ftr: { name: 'ftr', hp: 1100, img: 'images/others/difficulty-Future.png', scale: 0.54, dx: 0, dy: -193 },
   },
+  rewards: {
+    moneybag: {
+      name: '钱袋',
+      img: 'images/others/moneybag.png',
+      scale: 1.00,
+      milk: 250,
+    },
+  },
   tracklist: {
     test1: {
       name: '测试场景1',
       bg: 'images/backgrounds/test.png',
       bgm: 'sounds/lawnbgm(1).mp3',
       startMilk: 50,
-      waves: 20,
+      waves: 10,
+      firstReward: null,
       spawnMul: 1,
       spawnTable: ['chunipenguin'],
       showMonsters: true,
@@ -216,6 +225,7 @@ const INFO = {
       bgm: 'sounds/躯樹の墓守.mp3',
       startMilk: 50,
       waves: 30,
+      firstReward: null,
       spawnMul: 1,
       spawnTable: ['chunipenguin', 'chunipenguin_prs', 'chunipenguin_ftr'],
       showMonsters: true,

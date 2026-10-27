@@ -10,9 +10,10 @@
 
 直接用 Chromium 系浏览器（Chrome / Edge）打开 [index.html](index.html) 即可，不需要服务器、不需要编译；上面的 Pages 地址就是同一批文件直出，本地双击打开的效果一致（存档各存各的浏览器，互不相通）。
 
-- 载入顺序有依赖：`info/info.js` → `scenes/menu.js` → `scenes/test.js` → `save.js` → `game.js`。新增场景文件要插在 `game.js` 之前。
+- 载入顺序有依赖：`info/info.js` → `scenes/menu.js` → `scenes/test.js` → `save.js` → `clears.js` → `game.js`。新增场景文件要插在 `game.js` 之前（`clears.js` 用到 `save.js` 的 `cacheRead` / `cacheWrite`，又必须早于 `game.js` 里的启动流程）。
 - 「导入 / 导出」存档用的是 File System Access API（`window.showDirectoryPicker`），只有 Chromium 系支持；不支持时只在控制台警告，不影响游戏。
-- 存档写在浏览器 `localStorage`，键名 `apollo7s:save:<关卡 key>`（如 `test1`）。只在**离开关卡**（回主菜单 / 结算面板返回）和**「重新开始」**时写盘，游玩过程中不写；「重新开始」是 `resetRun()` 之后才写，所以会把上一局的进度直接覆盖成新局。两个开关（`opts`）不进存档。
+- 存档写在浏览器 `localStorage`，键名 `apollo7s:save:<关卡 key>`（如 `test1`）。只在**离开关卡**（回主菜单 / 结算演出结束 / 结算面板返回）和**「重新开始」**时写盘，游玩过程中不写；「重新开始」是 `resetRun()` 之后才写，所以会把上一局的进度直接覆盖成新局。四个菜单开关（`opts`：快速模式 / 关闭自然出怪 / 无冷却无花费 / 自动收集）不进存档。
+- 通关记录是**另一把单键** `apollo7s:cleared`（`clears.js`，形如 `{"test1":true}`）：领取首通奖励的那一刻直接写盘，不嵌在关卡存档里，因此不随「导入 / 导出」走，也不受 `resetRun()` 影响。只认 `=== true`，解析失败或数据脏一律当"没通过"、不抛错。
 
 ## 操作
 
@@ -21,8 +22,9 @@
 | 点击卡槽 / 数字键 `1`~`6` | 选中卡片（费用不足或冷却中不可选），半透明跟随鼠标 |
 | 点击空格子 | 放置；点击卡片本身 / 右键 / `Esc` 取消 |
 | 点击牛奶 | 收集（顶栏最左是牛奶计数框，其右是 6 个卡槽，冷却表现为自上而下的黑遮罩） |
+| 点击地上的奖励（钱袋） | 领取：标记首通 → 收掉场上存量奶 → 爆出一批奶 → 播结算演出回主菜单（见下方「领取与结算演出」；空中还在飞的奖励也能点） |
 | `` ` `` 或点击断网槽位 | 取出"断网"工具，再点某个伙伴即移除它（不触发它的身亡特效） |
-| `出怪` 按钮 | 立刻手动放一只怪（记为 `wave: 0`，不计入本波血量与胜负判定；但大波前"场上全空"的催波看的是怪物数组是否为空，手动放的怪同样会挡住它） |
+| `出怪` 按钮 | 立刻手动放一只怪（记为 `wave: 0`，不计入本波血量与胜负判定；但大波前"场上全空"的催波看的是怪物数组是否为空，手动放的怪同样会挡住它。末波了结时若还留着这种跌破不了 `threshold` 的健康怪，奖励就压着不掉，直到它被清掉） |
 | `菜单` 按钮 | 会话内开关：快速模式（时间 ×2）、关闭自然出怪、无冷却无花费、自动收集；退出 / 重新开始（带确认）/ 继续 |
 
 ## 目录结构
@@ -32,10 +34,11 @@ index.html          画布 + 脚本载入
 .nojekyll           空文件，告诉 GitHub Pages 别跑 Jekyll（见「在线游玩」）
 game.js             CFG 全局可调参数、画布/输入/主循环、通用绘制函数
 save.js             存档快照、校验、localStorage 读写、导入导出
-info/info.js        数据：卡片 / 子弹 / 怪物 / 关卡 / 牛奶 / BGM
+clears.js           首通记录（单键 apollo7s:cleared，独立于关卡存档、不进导入导出）
+info/info.js        数据：卡片 / 子弹 / 怪物 / 防具 / 奖励 / 关卡 / 牛奶 / BGM
 scenes/menu.js      主菜单场景
-scenes/test.js      战斗场景（网格、伙伴、怪物、子弹、牛奶、选卡、全景展示、波次、HUD、弹窗）
-images/             cards / partners / enemies / backgrounds / others（防具图标也在 others/）
+scenes/test.js      战斗场景（网格、伙伴、怪物、子弹、牛奶、奖励与结算演出、选卡、全景展示、波次、HUD、弹窗）
+images/             cards / partners / enemies / backgrounds / others（防具图标与钱袋 moneybag.png 也在 others/）
 sounds/             lawnbgm(1).mp3（场景1 + 全局默认）/ 躯樹の墓守.mp3（场景2）/ World's end BLACKBOX.mp3（已无关卡引用，文件暂留）
 data/               导出到磁盘的存档样例 save_test1.json / save_test2.json
 00_MASTER_PROMPT.md 约束（严格范围、必须写更新日志）
@@ -67,20 +70,24 @@ update_7sRef.md     面向玩家的内容日志（数值逻辑 / 修复 / UI美�
   - **二类 `armor2` = 独立挡弹**：只有飞向它本身的子弹会被它吃掉（`bulletHitKind` 先认二类再认本体），**溢出直接丢弃、不转给本体**，这颗子弹照常消耗，而且它附带的减速在这发上失效。**现在没有任何怪物使用二类**，这条路还缺一个字段，见下方约定。
   - **范围伤害**（touchhold 的 `burst`、Guy 的 `boom`）命中本体时连带二类，两者**各自全额**扣血（`hurtArea`），本体那一份仍先被一类吸收；范围判定只看本体贴图框。防具**不挡**两种掉血：跌破 `threshold` 后的流血只扣本体，金牛奶是整只怪直接清除（防具跟着消失、不掉落）。
 - **受击与离场演出**（纯画面，不改判定）：怪物被打中的那一帧起，被打的那一部分（本体 / 一类 / 二类）叠一层 `CFG.monster.hitAlpha` 的 `hitColor` 白，`CFG.monster.hitFlash = 0.05` 秒后硬切回原样；同一次里多个部分都在挡伤就一起闪，子弹被二类挡住时**只有二类闪**、本体安然无恙。因为是叠加而不是覆盖，处在减速中的怪会闪成浅蓝白。伙伴的闪看的是"被咬"不是"掉血"：每口咬下都给目标挂 `hitT`，所以 `immune` 的 touchhold、还在出土的 Guy 照样闪；跟手拖着的预览卡不算，流血与金牛奶清除也不闪。零血量的怪进 `state.deaths` 播倒地 —— `CFG.monster.death = { fall: 0.3, hold: 0.5, fade: 0.3, angle: 90, slide: 40 }`，`fall` 秒内绕脚线左转 90° 并左移 `slide` 像素，停 `hold` 秒、`fade` 秒淡出，整套 **1.1 秒**；带减速时动画时间走 `CFG.monster.slow` 倍速 ⇒ 看着 **2.2 秒**。防具被打穿的那一刻进 `state.drops` 掉落残骸 —— `CFG.armor.death = { fall: 0.15, hold: 0.5, fade: 0.3, run: 90, push: 0.45 }`，从挂载位置落到底边贴地、同时向右飘 `run` 像素，整套 **0.95 秒**。两种情况不播倒地：自己走出左边界（`x <= -60`）的怪照旧直接消失；被 `burst` / `boom` 炸死的怪连防具残骸都不留（`noCorpse`，并回滚当帧新增的掉落）。倒地与掉落期间不画防具、不画影子。`CFG.artPad` 按贴图路径给出空白边 `[左, 上, 右, 下]`（缺省 `[0,0,0,0]`），用来让倒下的脚真的贴到脚线上。
-- **关卡** `INFO.tracklist`：`name`（右下角关卡名）、`bg`、`bgm`、`startMilk`、`waves`、`spawnMul`、`spawnTable`（按 `weight` 加权决定怪物种类）、`showMonsters` / `deckSelect` 组合出三种开局：选卡 → 只做阵容全景展示 + 自动配卡 → 直接进战斗。**约定：`deckSelect: true` 只在 `showMonsters: true` 时才有意义。** `bgm` / `startMilk` 用 `??` 退回全局默认（`INFO.bgm` / `INFO.milk.start`），所以 `startMilk: 0` 是合法值；`startMilk` 只作用于新开局的局与"重新开始"，读档回来的局按存档奶量恢复。
-- **波次** `CFG.wave`：首波 `first`，之后 `gapMin~gapMax` 随机，每 `bigEvery` 波和本关最后一波是大波（大波**之前**那一次等待 `bigGap`，剩 `bigWarnGap` 时给警告横幅）。每波的是**总级别预算** = `min(ceil(wave / div), cap) × spawnMul`，大波再乘一次固定的 `bigMul`（2.5，不再随档位平方），**最后对预算向上取整** ⇒ 预算恒为整数**级别**，注意它不是只数：`level` 大于 1 的怪越多的表，同样预算出的只数越少（测试场景2 混了 1 / 2 / 4 级就是例子，测试场景1 全是 1 级才恰好"预算 = 只数"）。生成循环按怪物 `level` 累加、**装不下的怪直接重抽**，因此本波总级别既不会超出预算、也不会差零头 —— 前提是出怪表里有一只 `level: 1` 的怪（见下方约定）。出怪行按"上上波 / 上波"的行计数加权，避免连续堆同一行（`rowInit` 是这两个计数器的初值，必须播种，否则权重恒为 0）。催波：下一波不是大波时本波剩余血量低于 `hpCut` 就压到 `cutGap`，下一波是大波时场上全空压到 `bigCutGap`。**本波血量的分子与分母用同一个式子** `monWaveHp = hp + a1hp × armor1Weight + a2hp × armor2Weight`（当前 `1.00 / 0.20`，两个倍率各自独立可调），所以带防具的波需要打掉更多东西才会提前催波 —— 满血一只按 无防具 **270** / prs **640** / ftr **1370** 计入。所有计时走**游戏时钟**（`state.clock`），快速模式下真实时间折半。
-- **牛奶** `INFO.milk`（起始值 / 单颗面值 / 上限）+ `CFG.milk`（掉落间隔公式的四个常数、下落速度、存活与淡出时间、点击判定余量、抛物线 `arc`、飞向计数器的动画）。自然掉落间隔 = `min(已掉落数量 × dropStep + dropBase, dropCap) + random × dropRand`（毫秒）。"自动收集"在勾选的那一瞬间就把场上所有未收集的奶记入账（含在落、在抛物线里的）。
+- **关卡** `INFO.tracklist`：`name`（右下角关卡名）、`bg`、`bgm`、`startMilk`、`waves`、`firstReward`（本关首通专用奖励的 key，不用就写 `null`）、`spawnMul`、`spawnTable`（按 `weight` 加权决定怪物种类）、`showMonsters` / `deckSelect` 组合出三种开局：选卡 → 只做阵容全景展示 + 自动配卡 → 直接进战斗。**约定：`deckSelect: true` 只在 `showMonsters: true` 时才有意义。** `bgm` / `startMilk` 用 `??` 退回全局默认（`INFO.bgm` / `INFO.milk.start`），所以 `startMilk: 0` 是合法值；`startMilk` 只作用于新开局的局与"重新开始"，读档回来的局按存档奶量恢复。
+- **波次** `CFG.wave`：首波 `first`，之后 `gapMin~gapMax` 随机，每 `bigEvery` 波和本关最后一波是大波（大波**之前**那一次等待 `bigGap`，剩 `bigWarnGap` 时给警告横幅）。每波的是**总级别预算** = `min(ceil(wave / div), cap) × spawnMul`，大波再乘一次固定的 `bigMul`（2.5，不再随档位平方），**最后对预算向上取整** ⇒ 预算恒为整数**级别**，注意它不是只数：`level` 大于 1 的怪越多的表，同样预算出的只数越少（测试场景2 混了 1 / 2 / 4 级就是例子，测试场景1 全是 1 级才恰好"预算 = 只数"）。每波先走**两段保底**、最后才进补怪循环，优先级是 **末波保底 > 大波保底 > 加权补怪**：① 本波是最后一波（`state.wave === waves`）时，按 `spawnTable` 的顺序**每种怪各刷一只**，这一段**允许突破预算**（保底把 `sum` 抬过 `budget` 后 `while` 一次都不进）；② 本波是大波时，再补 `min(unit, budget - sum)` 只 `CFG.wave.bigSeed`（当前是普通中二企鹅），这一段**受预算截断**、超了就砍。`unit = min(ceil(wave / div), cap)` 就是大波保底的只数，没有第二套公式。两个注意点：既是大波又是末波的那一波（测试场景1 第 10 波 = 它唯一的大波兼末波、测试场景2 第 30 波），大波保底吃的是**扣掉末波保底之后**的剩余额度，被末波保底压过预算时这一波段一只都不补；`bigSeed` 写的是怪物 key、**不受本关 `spawnTable` 约束**，且那个 `min` 比的是"只数 vs 剩余额度"，只在 `bigSeed` 是 `level: 1` 时才等价于级别不超预算。补怪循环按怪物 `level` 累加、**装不下的怪直接重抽**，因此除末波保底之外，本波总级别既不会超出预算、也不会差零头 —— 前提是出怪表里有一只 `level: 1` 的怪（见下方约定）。出怪行按"上上波 / 上波"的行计数加权，避免连续堆同一行（`rowInit` 是这两个计数器的初值，必须播种，否则权重恒为 0）。催波：下一波不是大波时本波剩余血量低于 `hpCut` 就压到 `cutGap`，下一波是大波时场上全空压到 `bigCutGap`。**本波血量的分子与分母用同一个式子** `monWaveHp = hp + a1hp × armor1Weight + a2hp × armor2Weight`（当前 `1.00 / 0.20`，两个倍率各自独立可调），所以带防具的波需要打掉更多东西才会提前催波 —— 满血一只按 无防具 **270** / prs **640** / ftr **1370** 计入；两段保底刷出来的怪也逐只累进分母，所以末波真的超预算时，这一波要打掉更多东西才会提前催波。所有计时走**游戏时钟**（`state.clock`），快速模式下真实时间折半。
+- **牛奶** `INFO.milk`（起始值 / 单颗面值 / 上限）+ `CFG.milk`（掉落间隔公式的四个常数、下落速度、存活与淡出时间、点击判定余量、抛物线 `arc`、飞向计数器的动画、`halo` 光晕）。自然掉落间隔 = `min(已掉落数量 × dropStep + dropBase, dropCap) + random × dropRand`（毫秒）。"自动收集"在勾选的那一瞬间就把场上所有未收集的奶记入账（含在落、在抛物线里的）。每颗奶底下一圈 `CFG.milk.halo = { radius, alpha, color }`（当前 `0.7 / 0.30 / 白`）的径向白光随它一起画（半径 = 贴图长边 × `radius`），因为与贴图共用同一个 `globalAlpha`，临过期那 `CFG.milk.fade` 秒是**光晕跟着奶一起淡出**，不会留一块不透明的白；它覆盖 `state.milks` 的全部条目，所以钱袋爆出的那批也有光晕，而金牛奶（`state.gmilks`，另一条绘制循环）没有。
 - **金牛奶** `state.gmilks`：每行一颗停在场地左缘，**未进入死亡状态**（`hp >= threshold`）的怪物贴到它就被"发射"，向右 `CFG.gmilk.speed` px/s 推进并清除沿途怪物，飞出右边界后消耗掉。它是最后一道防线。
-- **胜负**：任一怪物贴图左边缘越过 `x = 0` → 判负；最后一波的怪全部跌破自己的 `threshold` → 判胜。两条都只读 `state.monsters`，所以倒地中的尸体与地上的残骸不会推迟结算。右下角进度条从第一波起显示，按大波在本关的位置摆放评级图标（`CFG.meter.ranks`，从最后一波往前数，数量不够就停在最后一档），图标越过之后从压在条底抬到条上沿；SYNC 光标跟着按 `meter.anim` 平滑后的进度走。
+- **奖励** `INFO.rewards`：按 key 索引、条目里**没有 `id`**，字段是 `name / img / scale / milk` —— `scale` 相对 `CFG.milk.size`（所以奖励与奶共用尺寸口径），`milk` 属于"能力开关"型字段（这枚奖励爆多少奶；不想爆的奖励**整行不写 `milk`**，与卡片的 `produce` / `burst` 同口径）。当前只有 `moneybag`（钱袋，`scale 1.00`、`milk 250`，贴图 `images/others/moneybag.png`）。发哪一枚由 `rewardKey()` 决定：本关 `tracklist.firstReward` 非 `null` **且这关还没通过**时用它，否则退回 `CFG.reward.defaultKey`（当前两关的 `firstReward` 都是 `null`，所以现在永远发钱袋）。
+- **奖励的掉落与拾取**：末波了结（`lastWaveSettled()` = 本波是最后一波，且末波的怪**没有一只**还在自己的 `threshold` 以上）时 `rewardCheck()` 先把场上跌破 `threshold` 的垂死怪**整批删掉**（不进 `state.deaths`、不掉防具、不画影子），删完若 `state.monsters` 仍非空（比如手动 `出怪` 塞进来的健康怪）就这一帧先不掉；清空后从**最右**那只垂死怪的贴图头顶抛出 `state.reward`，没有源点时落在 `CFG.reward.rest`。抛物线与奶**共用** `arcPoint` / `stepArc`（吃 `CFG.milk.arc` 的 `dur / h / spread`，落点同样贴脚线），`rewardHit` = 贴图框四周再放宽 `CFG.reward.hitPad`，**还在飞的时候就能点**。奖励不在 `state.milks` 里 ⇒ 永不过期、也不被"自动收集"收走；`state.reward` 存在或演出中时**自然掉奶与咪璐库产奶一起停产**（`resetRun()` 清掉后自动恢复）。
+- **领取与结算演出**：点击奖励后依次是 `markCleared()` 记首通 → 收掉场上所有**还没起飞**的存量奶 → `burstReward()` 沿上半圆弧爆出 `Math.round(奖励.milk / INFO.milk.value)` 颗奶（当前 250 / 25 = **10 颗**，半径 `CFG.reward.burst.radius`、`h: 0` ⇒ 那条抛物线退化成纯径向直线），每颗先飞 `burst.dur` 秒、再在空中停 `burst.hold` 秒才一起飞向计数器 → 建 `state.ceremony` 并暂停 BGM。演出总长 `CFG.reward.cer.dur`（5 秒）：`fly`（3 秒）内用现成的 `smooth()` 从拾取点飞到屏幕正中 `(CFG.W/2, CFG.H/2)`，全程按 `u = t / dur` 线性放大到 `scaleTo` 倍、白光半径从 `glowFrom` 涨到 `glowTo`，最后 `white`（2 秒）全屏白涨满；`t >= dur` 时 `resetRun() → writeRun()` 回主菜单（落盘是干净新局，与「重新开始」同口径）。演出期间**悬停 / 点击 / 右键 / 按键全部屏蔽**，但判负面板仍点得动、且画在白幕之上；`ceremony` **不进存档**，地上的 `reward` 进（`SAVE_KEYS` 末尾的 `reward`）—— 读档时字段非法就整份丢成 `null`（当帧由 `rewardCheck()` 幂等补回），还在飞的弧线就地结算到落点、不重播抛物线。
+- **胜负**：只剩**判负** —— 任一怪物贴图左边缘越过 `x = 0` → `state.result = 'lose'`；打完末波不再弹胜利面板，改成上面的掉奖励 + 演出，所以 `state.result` 的取值只有 `'lose'`。判负的式子与 `lastWaveSettled()` 都只读 `state.monsters`，所以倒地中的尸体、地上的残骸与被删掉的垂死怪都不会推迟这两件事。右下角进度条从第一波起显示，按大波在本关的位置摆放评级图标（`CFG.meter.ranks`，从最后一波往前数，数量不够就停在最后一档），图标越过之后从压在条底抬到条上沿；SYNC 光标跟着按 `meter.anim` 平滑后的进度走。
 
 ## 改数值 / 加内容
 
 1. 加一只怪：把贴图命名为 `images/enemies/enm_<key>.png`（**朝左画**，怪物数据里已经没有 `flip` 了），在 `INFO.monsters` 里补一条（`id`、`name`、`level / weight / tier`、`hp`、`threshold`、`armor1 / armor2`、`atkInterval / atkDamage`、`speedMin/Max`、`img`、`scale`、`hitbox`），再把 key 加进关卡的 `spawnTable`。`level` 是**正整数**：出怪表里必须至少有一只 `level: 1` 的怪，也不许出现 `level: 0`（两条都是硬约束，见下方约定）。不穿防具就两行都写 `null`；要穿则填 `INFO.armors` 里已存在的 key（防具条目只有 `name / hp / img / scale / dx / dy`，没有 `id`）。
 2. 加一张卡：贴图 `images/cards/card_<key>.png` + `images/partners/ptn_<key>.png`，在 `INFO.cards` 里按 **id 升序**插入（文件顺序就是卡槽顺序和 `1`~`6` 按键映射，运行时不重排）。
-3. 加一关：`INFO.tracklist` 里补一条（上面那九项都写全），贴图放 `images/backgrounds/`、音乐放 `sounds/`；主菜单的两枚关卡按钮是 `scenes/menu.js` 里按 key 写死的，要加第三关得在那里补。
-4. 全局参数（判定距离、影子、减速倍率与减速染色、特效、波次档位 / 大波倍率 / 防具血量倍率 `CFG.wave`、受击闪白与倒地参数 `CFG.monster`、防具掉落参数 `CFG.armor`、倒地贴地补偿 `CFG.artPad`、相机平移量 `deck.cam`、阵容展示间距 `deck.showGap` 等）都在 [game.js](game.js) 顶部的 `CFG`。
+3. 加一关：`INFO.tracklist` 里补一条（上面那十项都写全，`firstReward` 不配也要明写 `null`），贴图放 `images/backgrounds/`、音乐放 `sounds/`；主菜单的两枚关卡按钮是 `scenes/menu.js` 里按 key 写死的，要加第三关得在那里补。
+4. 加一枚奖励：贴图放 `images/others/`，`INFO.rewards` 里补一条（`name / img / scale / milk`，**没有 `id`**），再把它填进某关的 `firstReward`（只在"这关还没通过"时生效）或改成 `CFG.reward.defaultKey`（常驻）。尺寸与抛物线复用 `CFG.milk`（`size` / `arc`），只有点击余量 `CFG.reward.hitPad` 与光晕 `CFG.reward.halo` 单列；爆出的奶只数不写死，由 `milk / INFO.milk.value` 推导。
+5. 全局参数（判定距离、影子、减速倍率与减速染色、特效、波次档位 / 大波倍率 / 大波保底怪 key / 防具血量倍率 `CFG.wave`、受击闪白与倒地参数 `CFG.monster`、防具掉落参数 `CFG.armor`、奖励与结算演出参数 `CFG.reward`、牛奶光晕 `CFG.milk.halo`、倒地贴地补偿 `CFG.artPad`、相机平移量 `deck.cam`、阵容展示间距 `deck.showGap` 等）都在 [game.js](game.js) 顶部的 `CFG`。
 
-> 约定：**没被点名的数值也显式写进 `info`**，不留给代码兜底 —— 布尔与常量类字段（卡片的 `immune` / `flip` / `shots` / 子弹的 `slow` / 关卡的 `bgm` / `startMilk` / 怪物的 `hp` / `threshold` / `atkInterval` / `atkDamage` / 怪物的 `armor1` / `armor2`）一律写出来，"默认无防具"就是明写 `null` 而不是省掉这一行。例外是"能力开关"类字段（`produce` / `place` / `effect` / `burst` / `boom` / `charge` / `wake` / `life` / `bullet` / `atkMin` / `atkMax` / `bulletSpeed`）：代码拿"有没有这个键"当开关，所以没有该能力的卡**必须整个不写**，填 `0` 或空对象会空跑或抛错。
+> 约定：**没被点名的数值也显式写进 `info`**，不留给代码兜底 —— 布尔与常量类字段（卡片的 `immune` / `flip` / `shots` / 子弹的 `slow` / 关卡的 `bgm` / `startMilk` / `firstReward` / 怪物的 `hp` / `threshold` / `atkInterval` / `atkDamage` / 怪物的 `armor1` / `armor2`）一律写出来，"默认无防具""默认不配首通奖励"就是明写 `null` 而不是省掉这一行。例外是"能力开关"类字段（`produce` / `place` / `effect` / `burst` / `boom` / `charge` / `wake` / `life` / `bullet` / `atkMin` / `atkMax` / `bulletSpeed` / 奖励的 `milk`）：代码拿"有没有这个键"当开关，所以没有该能力的卡**必须整个不写**，填 `0` 或空对象会空跑或抛错。
 
 > 出怪表的 `level` 约定（**由数据保证，代码不做兜底分支**）：每关的 `spawnTable` 里至少要有一只 `level: 1` 的怪，且任何怪都不许写 `level: 0`。预算已向上取整成整数，有 1 级怪就保证"总级别严格等于出怪量"必然达成。两条各自破坏后的表现：1 级怪缺席时，剩余额度一旦小于表里最小的 `level`，过滤出来的可选表就是空的，`pickMonster` 抽不到东西、紧接着读 `INFO.monsters[undefined].level` **抛错**（本波直接崩，不会静默少刷）；写 `level: 0` 则永远"装得下"，会被反复抽中而总级别不涨，一波刷出成百上千只、游戏卡死。
 
@@ -96,6 +103,7 @@ update_7sRef.md     面向玩家的内容日志（数值逻辑 / 修复 / UI美�
 
 - 伙伴攻击动画（01 目标里标"部分完成"）。怪物那侧的受击表现已经做完了（闪白 + 倒地 + 防具掉落），不再挂在待办里。
 - **二类防具等于还没实测**：没有一只怪挂 `armor2`，`INFO.armors` 也还缺 `hitbox` 字段（见上方约定），所以挡弹、丢减速那条路从未在游戏里跑到过。
+- **首通奖励的分岔还没实测**：两关的 `firstReward` 都是 `null`，所以 `rewardKey()` 里"这关还没通过 ⇒ 改用 `firstReward`"那条分支从未在游戏里走到，实际每关发的都是 `CFG.reward.defaultKey` 那枚钱袋；`INFO.rewards` 也只有 `moneybag` 一条，"不带 `milk` 字段的奖励（只标记首通、不爆奶）"只在沙箱里验过。通关标记 `apollo7s:cleared` 是全关卡共用一把键，目前没有"看是否已通关"的入口（主菜单不显示）。
 - 三段式卡（Guy）的三个状态只靠贴图露出多少来体现（`emergeRatio`：未激活只露上半截、出土中从 `charge` 到 `charge + wake` 升满、已激活全貌），没有倒计时、高亮之类的显式状态标识。
 - 主菜单「开始游戏」目前只弹"该内容还未开发"。
 - 关卡设计文档里的"预留规格"条目尚未动工。

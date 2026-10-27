@@ -16,15 +16,23 @@ const CFG = {
   levelName: { font: 26, color: '#ffe14d', padX: 24, padY: 12 },
   meter: { w: 260, padX: 24, padY: 12, gap: 16, anim: 0.6, frame: [2, 2, 155, 19], fill: [7, 33, 143, 11], inset: [5, 4], sync: { h: 47, src: [80, 80], pivot: [39.5, 39.5], dy: 0 }, mark: { h: 64, src: [112, 140], pivot: [55.5, 78], dy: -6, dyDone: -30 }, ranks: ['SSSp', 'SSS', 'SSp', 'SS', 'Sp', 'S'] },
   tip: { font: 26, lineH: 34, padX: 16, padY: 8, r: 10, bg: 'rgba(0,0,0,0.78)', border: 'rgba(255,255,255,0.35)' },
-  wave: { div: 3, cap: 8, bigEvery: 10, bigMul: 2.5, first: 19000, gapMin: 25000, gapMax: 31000, bigGap: 52000, hpCut: 0.65, armor1Weight: 1.00, armor2Weight: 0.20, cutGap: 3000, bigCutGap: 9000, bigWarnGap: 7000, rowInit: 2 },
+  wave: { div: 3, cap: 8, bigEvery: 10, bigMul: 2.5, bigSeed: 'chunipenguin', first: 19000, gapMin: 25000, gapMax: 31000, bigGap: 52000, hpCut: 0.65, armor1Weight: 1.00, armor2Weight: 0.20, cutGap: 3000, bigCutGap: 9000, bigWarnGap: 7000, rowInit: 2 },
   monster: { bleedGap: 0.033, bleedDmg: 1, slow: 0.5, slowColor: '#3a5c7a', slowAlpha: 0.55, feet: 81, hitFlash: 0.05, hitAlpha: 0.2, hitColor: '#ffffff', death: { fall: 0.3, hold: 0.5, fade: 0.3, angle: 90, slide: 40 } },
   armor: { death: { fall: 0.15, hold: 0.5, fade: 0.3, run: 90, push: 0.45 } },
+  reward: {
+    defaultKey: 'moneybag',
+    rest: { x: 1024, row: 2, dy: -223.2 },
+    hitPad: 55,
+    halo: { radius: 1.1, alpha: 0.55, color: '255,225,120' },
+    burst: { dur: 0.2, hold: 0.2, radius: 130 },
+    cer: { dur: 5, fly: 3, white: 2, scaleTo: 3, glowFrom: 260, glowTo: 1180, glowAlpha: 0.55, color: '255,255,255' },
+  },
   artPad: { 'images/enemies/enm_chunipenguin.png': [58, 0, 101, 36] },
   bulletSize: 64,
   hitDist: 40,
   bulletSpread: 40,
   footMargin: 12,
-  milk: { size: 120, hitPad: 55, fallSpeed: 80, life: 20, fade: 1.2, dropBase: 4250, dropStep: 100, dropCap: 9500, dropRand: 2750, flySpeed: 2400, flyWait: 0.2, arc: { dur: 0.9, h: 150, spread: 70 } },
+  milk: { size: 120, hitPad: 55, fallSpeed: 80, life: 20, fade: 1.2, dropBase: 4250, dropStep: 100, dropCap: 9500, dropRand: 2750, flySpeed: 2400, flyWait: 0.2, arc: { dur: 0.9, h: 150, spread: 70 }, halo: { radius: 0.7, alpha: 0.30, color: '255,255,255' } },
   glow: { time: 1, radius: 0.8, alpha: 0.8, color: '255,225,120' },
   shadow: { color: '0,0,0', alpha: 0.22, squash: 0.22, partner: 0.66, monster: 0.7, gmilk: 0.6, milk: 0.5, bullet: 0.45 },
   deck: { cam: 1400, hold: 1.5, panIn: 1.5, settle: 1, panOut: 1.5, rise: 0.3, fly: 0.18, shift: 0.12, minShow: 5, showPad: 150, showGap: 230, count: 5, milkAt: 1, milkStep: 0.1, milkPan: 0.1, marks: [['3', 2.5, 0.5], ['2', 3, 0.5], ['1', 3.5, 0.5], ['START!', 4, 1]], panel: { x: 40, y: 240, w: 760 }, pool: { rows: 6, cols: 8, w: 76, h: 122, gapX: 12, gapY: 8 } },
@@ -86,6 +94,8 @@ function makeRun(key) {
     monsters: [],
     deaths: [],
     drops: [],
+    reward: null,
+    ceremony: null,
     bullets: [],
     milks: [],
     effects: [],
@@ -141,6 +151,7 @@ function enterRun(key) {
   state = slot;
   slot.mouse = mouse;
   slot.scene = 'game';
+  slot.ceremony = null;
   slot.loading = true;
   loadRun(key).then(() => {
     slot.loading = false;
@@ -232,6 +243,7 @@ canvas.addEventListener('click', e => {
 
 canvas.addEventListener('contextmenu', e => {
   e.preventDefault();
+  if (state.ceremony) return;
   state.selected = null;
   state.net = false;
 });
@@ -274,6 +286,7 @@ Promise.all([
   ...CFG.meter.ranks.map(r => loadImage('allclear_' + r, 'images/others/UI_MSS_Allclear_Icon_' + r + '.png')),
   ...Object.keys(INFO.monsters).map(k => loadImage('enm_' + k, INFO.monsters[k].img)),
   ...Object.keys(INFO.armors).map(k => loadImage('arm_' + k, INFO.armors[k].img)),
+  ...Object.keys(INFO.rewards).map(k => loadImage('rew_' + k, INFO.rewards[k].img)),
   ...CARDS.map(c => loadImage('card_' + c.key, c.info.cardImg)),
   ...CARDS.map(c => loadImage('ptn_' + c.key, c.info.ptnImg)),
   ...CARDS.filter(c => c.info.effect).map(c => loadImage('eff_' + c.key, c.info.effect.img)),

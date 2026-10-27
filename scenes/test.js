@@ -62,6 +62,88 @@ function produceMilk(p) {
   if (state.opts.autoCollect) collectMilk(k);
 }
 
+function arcPoint(a, u) {
+  return { x: a.sx + (a.tx - a.sx) * u, y: a.sy + (a.ty - a.sy) * u - a.h * 4 * u * (1 - u) };
+}
+
+function stepArc(o, dt) {
+  const a = o.arc;
+  a.t += dt;
+  const u = Math.min(1, a.t / a.dur);
+  const p = arcPoint(a, u);
+  o.x = p.x;
+  o.y = p.y;
+  if (u >= 1) {
+    o.x = a.tx;
+    o.y = a.ty;
+    o.arc = null;
+  }
+  return u;
+}
+
+function rewardSize(key) {
+  const h = CFG.milk.size * INFO.rewards[key].scale;
+  const img = imgs['rew_' + key];
+  return { w: h * img.width / img.height, h };
+}
+
+function rewardKey() {
+  const lv = INFO.tracklist[state.slot];
+  if (lv.firstReward && !isCleared(state.slot)) return lv.firstReward;
+  return CFG.reward.defaultKey;
+}
+
+function spawnReward(src) {
+  const g = CFG.grid;
+  const a = CFG.milk.arc;
+  const rest = CFG.reward.rest;
+  const key = rewardKey();
+  const s = rewardSize(key);
+  const row = src ? src.row : rest.row;
+  const feetY = feetLine(row);
+  const sx = src ? src.x : rest.x;
+  const b = src ? monsterBox(src) : null;
+  const sy = b ? b.y - b.h / 2 : feetY + rest.dy;
+  const tx = Math.min(g.x + CFG.plantCols * g.cw - s.w / 2, Math.max(g.x + s.w / 2, sx + randRange(-a.spread, a.spread)));
+  state.reward = { key, x: sx, y: sy, arc: { sx, sy, tx, ty: feetY - s.h / 2, t: 0, dur: a.dur, h: a.h } };
+}
+
+function rewardHit(p) {
+  const r = state.reward;
+  if (!r) return false;
+  const s = rewardSize(r.key);
+  const pad = CFG.reward.hitPad;
+  return inRect(p, { x: r.x - s.w / 2 - pad, y: r.y - s.h / 2 - pad, w: s.w + pad * 2, h: s.h + pad * 2 });
+}
+
+function pickupReward() {
+  const r = state.reward;
+  const rw = INFO.rewards[r.key];
+  markCleared(state.slot);
+  for (const k of state.milks) if (!k.fly) collectMilk(k);
+  if (rw.milk) burstReward(r, rw.milk);
+  state.ceremony = { key: r.key, t: 0, sx: r.x, sy: r.y };
+  state.reward = null;
+  bgm.pause();
+}
+
+function burstReward(r, value) {
+  const b = CFG.reward.burst;
+  const n = Math.max(1, Math.round(value / INFO.milk.value));
+  for (let i = 0; i < n; i++) {
+    const th = Math.PI * (i + 0.5) / n;
+    state.milks.push({
+      x: r.x,
+      y: r.y,
+      bottom: r.y,
+      stopped: false,
+      age: 0,
+      arc: { sx: r.x, sy: r.y, tx: r.x - b.radius * Math.cos(th), ty: r.y - b.radius * Math.sin(th), t: 0, dur: b.dur, h: 0 },
+      hold: b.hold,
+    });
+  }
+}
+
 function spawnEffect(p) {
   const e = CARDS[p.card].info.effect;
   const c = cellCenter(p.row, p.col);
@@ -340,6 +422,21 @@ function spawnWave() {
   budget = Math.ceil(budget);
   let sum = 0;
   state.waveHp = 0;
+  if (state.wave === lv.waves) {
+    for (const key of lv.spawnTable) {
+      const m = spawnMonster(pickRow(), key, state.wave);
+      sum += INFO.monsters[key].level;
+      state.waveHp += monWaveHp(m);
+    }
+  }
+  if (isBigWave(state.wave)) {
+    const seed = Math.min(unit, budget - sum);
+    for (let i = 0; i < seed; i++) {
+      const m = spawnMonster(pickRow(), CFG.wave.bigSeed, state.wave);
+      sum += INFO.monsters[CFG.wave.bigSeed].level;
+      state.waveHp += monWaveHp(m);
+    }
+  }
   while (sum < budget) {
     const key = pickMonster(lv.spawnTable.filter(k => INFO.monsters[k].level <= budget - sum));
     const m = spawnMonster(pickRow(), key, state.wave);
@@ -373,12 +470,26 @@ function waveWarnCheck() {
 
 function resultCheck() {
   if (state.result) return;
-  const lv = INFO.tracklist[state.slot];
   if (state.monsters.some(m => { const b = monsterBox(m); return b.x - b.w / 2 <= 0; })) {
     state.result = 'lose';
     return;
   }
-  if (state.wave === lv.waves && !state.monsters.some(m => m.wave === lv.waves && m.hp >= monThreshold(m))) state.result = 'win';
+}
+
+function lastWaveSettled() {
+  const lv = INFO.tracklist[state.slot];
+  return state.wave === lv.waves && !state.monsters.some(m => m.wave === lv.waves && m.hp >= monThreshold(m));
+}
+
+function rewardCheck() {
+  if (state.reward || state.ceremony || state.result) return;
+  if (!lastWaveSettled()) return;
+  const dying = state.monsters.filter(m => m.hp < monThreshold(m));
+  if (dying.length > 0) state.monsters = state.monsters.filter(m => m.hp >= monThreshold(m));
+  if (state.monsters.length > 0) return;
+  let src = null;
+  for (const m of dying) if (!src || m.x > src.x) src = m;
+  spawnReward(src);
 }
 
 function gmilkRestX() {
@@ -431,7 +542,6 @@ function uiRects() {
     resumeRestart: { x: rbX + rbW + 30, y: rbY, w: rbW, h: 64 },
     resumeGo: { x: rbX + (rbW + 30) * 2, y: rbY, w: rbW, h: 64 },
     resultPanel: ep,
-    winBack: { x: (CFG.W - 240) / 2, y: ep.y + 150, w: 240, h: 64 },
     loseBack: { x: ep.x + 60, y: ep.y + 150, w: 240, h: 64 },
     loseRetry: { x: ep.x + 60 + 240 + 40, y: ep.y + 150, w: 240, h: 64 },
   };
@@ -447,6 +557,8 @@ function resetRun() {
   state.monsters = [];
   state.deaths = [];
   state.drops = [];
+  state.reward = null;
+  state.ceremony = null;
   state.bullets = [];
   state.milks = [];
   state.effects = [];
@@ -1108,6 +1220,48 @@ function drawDrop(f) {
   ctx.globalAlpha = 1;
 }
 
+function drawReward() {
+  const r = state.reward;
+  const hl = CFG.reward.halo;
+  const s = rewardSize(r.key);
+  const rad = Math.max(s.w, s.h) * hl.radius;
+  const gr = ctx.createRadialGradient(r.x, r.y, 0, r.x, r.y, rad);
+  gr.addColorStop(0, 'rgba(' + hl.color + ',' + hl.alpha + ')');
+  gr.addColorStop(1, 'rgba(' + hl.color + ',0)');
+  ctx.fillStyle = gr;
+  ctx.beginPath();
+  ctx.arc(r.x, r.y, rad, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.drawImage(imgs['rew_' + r.key], r.x - s.w / 2, r.y - s.h / 2, s.w, s.h);
+}
+
+function drawCeremony() {
+  const c = state.ceremony;
+  const ce = CFG.reward.cer;
+  const u = Math.min(1, c.t / ce.dur);
+  const k = smooth(Math.min(1, c.t / ce.fly));
+  const x = c.sx + (CFG.W / 2 - c.sx) * k;
+  const y = c.sy + (CFG.H / 2 - c.sy) * k;
+  const sc = 1 + (ce.scaleTo - 1) * u;
+  const s = rewardSize(c.key);
+  const w = s.w * sc;
+  const h = s.h * sc;
+  const rad = ce.glowFrom + (ce.glowTo - ce.glowFrom) * u;
+  const gr = ctx.createRadialGradient(x, y, 0, x, y, rad);
+  gr.addColorStop(0, 'rgba(' + ce.color + ',' + ce.glowAlpha + ')');
+  gr.addColorStop(1, 'rgba(' + ce.color + ',0)');
+  ctx.fillStyle = gr;
+  ctx.beginPath();
+  ctx.arc(x, y, rad, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.drawImage(imgs['rew_' + c.key], x - w / 2, y - h / 2, w, h);
+  const white = Math.max(0, Math.min(1, (c.t - (ce.dur - ce.white)) / ce.white));
+  if (white > 0) {
+    ctx.fillStyle = 'rgba(255,255,255,' + white + ')';
+    ctx.fillRect(0, 0, CFG.W, CFG.H);
+  }
+}
+
 function drawFieldBg(camX) {
   const bl = CFG.bgBlur;
   const img = imgs['bg_' + state.slot];
@@ -1358,6 +1512,15 @@ function render() {
   for (const k of state.milks) {
     const left = CFG.milk.life - k.age;
     ctx.globalAlpha = k.fly ? 1 : (left < CFG.milk.fade ? Math.max(0, left / CFG.milk.fade) : 1);
+    const hl = CFG.milk.halo;
+    const rad = Math.max(ms.w, ms.h) * hl.radius;
+    const gr = ctx.createRadialGradient(k.x, k.y, 0, k.x, k.y, rad);
+    gr.addColorStop(0, 'rgba(' + hl.color + ',' + hl.alpha + ')');
+    gr.addColorStop(1, 'rgba(' + hl.color + ',0)');
+    ctx.fillStyle = gr;
+    ctx.beginPath();
+    ctx.arc(k.x, k.y, rad, 0, Math.PI * 2);
+    ctx.fill();
     ctx.drawImage(imgs.milk, k.x - ms.w / 2, k.y - ms.h / 2, ms.w, ms.h);
   }
   ctx.globalAlpha = 1;
@@ -1461,6 +1624,9 @@ function render() {
     if (mark) drawBannerText(mark, 1);
   }
 
+  if (state.reward) drawReward();
+  if (state.ceremony) drawCeremony();
+
   if (state.menuOpen) drawMenuPanel(ui);
 
   if (state.confirmRestart) drawConfirmPanel(ui);
@@ -1487,28 +1653,28 @@ function render() {
     ctx.font = 'bold 40px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(state.result === 'win' ? '胜利' : '失败', ui.resultPanel.x + ui.resultPanel.w / 2, ui.resultPanel.y + 80);
-    if (state.result === 'win') {
-      drawButton(ui.winBack, '返回');
-    } else {
-      drawButton(ui.loseBack, '返回');
-      drawButton(ui.loseRetry, '重试');
-    }
+    ctx.fillText('失败', ui.resultPanel.x + ui.resultPanel.w / 2, ui.resultPanel.y + 80);
+    drawButton(ui.loseBack, '返回');
+    drawButton(ui.loseRetry, '重试');
   }
   ctx.lineWidth = 1;
 }
 
 function testHover() {
+  if (state.ceremony) {
+    canvas.style.cursor = 'default';
+    return;
+  }
   if (state.deckPhase && !state.menuOpen) {
     deckHover();
     return;
   }
   const ui = uiRects();
-  let ptr = slotAt(state.mouse.x, state.mouse.y) >= 0 || inRect(state.mouse, ui.menuBtn) || inRect(state.mouse, ui.spawnBtn) || inRect(state.mouse, CFG.netSlot) || milkAt(state.mouse.x, state.mouse.y) >= 0;
+  let ptr = slotAt(state.mouse.x, state.mouse.y) >= 0 || inRect(state.mouse, ui.menuBtn) || inRect(state.mouse, ui.spawnBtn) || inRect(state.mouse, CFG.netSlot) || milkAt(state.mouse.x, state.mouse.y) >= 0 || rewardHit(state.mouse);
   if (state.menuOpen) ptr = inRect(state.mouse, ui.menuBtn) || inRect(state.mouse, ui.resumeBtn) || inRect(state.mouse, ui.restartBtn) || inRect(state.mouse, ui.quitBtn) || OPTS.some((o, i) => inRect(state.mouse, ui.optRow(i)));
   if (state.confirmRestart) ptr = inRect(state.mouse, ui.confirmYes) || inRect(state.mouse, ui.confirmNo);
   if (state.resumeAsk) ptr = inRect(state.mouse, ui.resumeBack) || inRect(state.mouse, ui.resumeRestart) || inRect(state.mouse, ui.resumeGo);
-  if (state.result) ptr = state.result === 'win' ? inRect(state.mouse, ui.winBack) : inRect(state.mouse, ui.loseBack) || inRect(state.mouse, ui.loseRetry);
+  if (state.result) ptr = inRect(state.mouse, ui.loseBack) || inRect(state.mouse, ui.loseRetry);
   canvas.style.cursor = ptr ? 'pointer' : 'default';
 }
 
@@ -1520,18 +1686,19 @@ function testClick(p) {
     return;
   }
   if (state.result) {
-    if (state.result === 'win' ? inRect(p, ui.winBack) : inRect(p, ui.loseBack)) {
+    if (inRect(p, ui.loseBack)) {
       state.scene = 'menu';
       state.result = null;
       bgm.pause();
       writeRun();
-    } else if (state.result === 'lose' && inRect(p, ui.loseRetry)) {
+    } else if (inRect(p, ui.loseRetry)) {
       resetRun();
       beginRun();
       writeRun();
     }
     return;
   }
+  if (state.ceremony) return;
   if (!state.menuOpen && !state.resumeAsk && bgm.paused) playBgm();
   if (state.resumeAsk) {
     if (inRect(p, ui.resumeBack)) {
@@ -1597,6 +1764,10 @@ function testClick(p) {
     state.net = false;
     return;
   }
+  if (rewardHit(p)) {
+    pickupReward();
+    return;
+  }
   const mi = milkAt(p.x, p.y);
   if (mi >= 0) {
     collectMilk(state.milks[mi]);
@@ -1645,7 +1816,7 @@ function testKey(e) {
     state.net = false;
     return;
   }
-  if (e.repeat || state.loading || state.menuOpen || state.resumeAsk || state.confirmRestart || state.result) return;
+  if (e.repeat || state.loading || state.menuOpen || state.resumeAsk || state.confirmRestart || state.result || state.ceremony) return;
   if (e.key >= '1' && e.key <= '6') {
     const si = Number(e.key) - 1;
     if (si >= CFG.cardSlots || state.deck[si] === null) return;
@@ -1667,6 +1838,7 @@ function updateGame(raw) {
   state.clock += dt * 1000;
   state.bgmAt = bgm.currentTime;
   const lv = INFO.tracklist[state.slot];
+  const stopped = !!(state.reward || state.ceremony);
   if (!state.opts.noNatural && state.wave < lv.waves && state.clock - state.lastSpawn > state.waveGap) {
     state.lastSpawn = state.clock;
     state.wave++;
@@ -1674,7 +1846,7 @@ function updateGame(raw) {
     state.bigWarned = false;
     spawnWave();
   }
-  if (state.clock - state.lastMilk > state.milkInterval) {
+  if (!stopped && state.clock - state.lastMilk > state.milkInterval) {
     state.lastMilk = state.clock;
     state.milkInterval = randMilkInterval();
     spawnMilk();
@@ -1708,17 +1880,12 @@ function updateGame(raw) {
     }
     k.age += dt;
     if (k.arc) {
-      const a = k.arc;
-      a.t += dt;
-      const u = Math.min(1, a.t / a.dur);
-      k.x = a.sx + (a.tx - a.sx) * u;
-      k.y = a.sy + (a.ty - a.sy) * u - a.h * 4 * u * (1 - u);
-      if (u >= 1) {
-        k.x = a.tx;
-        k.y = a.ty;
-        k.arc = null;
-        k.stopped = true;
-      }
+      if (stepArc(k, dt) >= 1) k.stopped = true;
+      continue;
+    }
+    if (k.hold !== undefined) {
+      k.hold -= dt;
+      if (k.hold <= 0) collectMilk(k);
       continue;
     }
     if (!k.stopped) {
@@ -1730,6 +1897,7 @@ function updateGame(raw) {
     }
   }
   state.milks = state.milks.filter(k => k.fly ? !(k.arrived && k.wait <= 0) : k.age < CFG.milk.life);
+  if (state.reward && state.reward.arc) stepArc(state.reward, dt);
   const g = CFG.grid;
   for (const m of state.monsters) {
     if (m.slow > 0) m.slow = Math.max(0, m.slow - dt);
@@ -1774,7 +1942,7 @@ function updateGame(raw) {
 
   for (const p of state.plants) {
     const info = CARDS[p.card].info;
-    if (!info.produce) continue;
+    if (stopped || !info.produce) continue;
     p.prodT -= dt;
     if (p.prodT <= 0) {
       p.prodT = randRange(info.produce.min, info.produce.max);
@@ -1898,4 +2066,13 @@ function updateGame(raw) {
   waveCutCheck();
   waveWarnCheck();
   resultCheck();
+  rewardCheck();
+  if (state.ceremony) {
+    state.ceremony.t += dt;
+    if (state.ceremony.t >= CFG.reward.cer.dur) {
+      resetRun();
+      writeRun();
+      state.scene = 'menu';
+    }
+  }
 }

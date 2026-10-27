@@ -1,5 +1,5 @@
 const SAVE_KEYS = ['clock', 'wave', 'waveGap', 'waveHp', 'bigWarned', 'banners', 'rowLast', 'rowSecondLast', 'lastSpawn', 'lastMilk', 'milkInterval', 'milkDropped', 'milk', 'milkShown',
-  'deck', 'cool', 'plants', 'bullets', 'milks', 'effects', 'gmilks', 'bgmAt'];
+  'deck', 'cool', 'plants', 'bullets', 'milks', 'effects', 'gmilks', 'bgmAt', 'reward'];
 
 const LS_PREFIX = 'apollo7s:save:';
 
@@ -51,6 +51,12 @@ function applyRunText(key, text) {
   }
   const s = SLOTS[key];
   for (const k of SAVE_KEYS) if (o[k] !== undefined) s[k] = o[k];
+  if (!s.reward || !INFO.rewards[s.reward.key] || typeof s.reward.x !== 'number' || typeof s.reward.y !== 'number') s.reward = null;
+  if (s.reward && s.reward.arc) {
+    s.reward.x = s.reward.arc.tx;
+    s.reward.y = s.reward.arc.ty;
+    s.reward.arc = null;
+  }
   s.monsters = o.monsters.map(m => Object.assign({}, m));
   return true;
 }

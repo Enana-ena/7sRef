@@ -1,5 +1,147 @@
 # 更新日志
 
+## v0.1.79（2026-10-27）
+- 按你「查看更新记录，修改一下README，然后push」——纯文档轮，**代码一行没动**。把 v0.1.71 起各轮在 `README.md 未改` 段落里挂账的滞后清单一次性收干净（v0.1.71 的七处 + v0.1.72–v0.1.78 各轮补记的五处），改的是 `README.md` 一个文件
+- **新增/重写的段落**：①「运行」的载入顺序补上 `clears.js`（`save.js` 之后、`game.js` 之前，因为它调 `cacheRead` / `cacheWrite`），并单列一条讲 `apollo7s:cleared` 这把**单键**通关记录（领取首通那刻直接写盘、不嵌在关卡存档里、不随导入导出、不受 `resetRun()` 影响、只认 `=== true`）；②「操作」表新增"点击地上的奖励"一行，`出怪` 那行补上新出现的连带——末波了结时若还留着跌破不了 `threshold` 的手动怪，奖励压着不掉；③目录结构补 `clears.js` 与 `images/others/moneybag.png`，`info/info.js` 的清单加"防具 / 奖励"、`scenes/test.js` 的清单加"奖励与结算演出"；④玩法循环新插入**奖励 / 奖励的掉落与拾取 / 领取与结算演出**三条（`INFO.rewards` 只有 `name / img / scale / milk` 且**无 `id`**、`milk` 归"能力开关"所以不爆奶的奖励整行不写；`rewardKey()` = `firstReward` 非 `null` 且未通关 ? 用它 : `CFG.reward.defaultKey`；`rewardCheck` 先整批删垂死怪（不进 `state.deaths`、不掉防具）再从最右那只头顶抛、无源点用 `CFG.reward.rest`、抛物线复用 `arcPoint` / `stepArc` 与 `CFG.milk.arc`、`hitPad` 放宽且空中就能点；领取顺序＝标记首通→收存量未起飞的奶→按 `milk / INFO.milk.value` 爆 10 颗→停 `burst.hold` 才起飞→建 ceremony 并停 BGM；演出 `dur 5 / fly 3 / white 2 / scaleTo 3`、`resetRun() → writeRun()` 回菜单；`state.reward` 或演出期间自然掉奶与 `produce` 一起停产；`reward` 进 `SAVE_KEYS` 而 `ceremony` 不进，读档时非法字段整份丢成 `null`、在飞的弧线就地结算）；⑤「胜负」条改成**只剩判负**（`state.result` 只有 `'lose'`，末波打完走奖励与演出而不是胜利面板），进度条那句原样保留
+- **改掉的错**：`运行` 段那句"两个开关（`opts`）不进存档"是旧数，`OPTS` 现在四条 ⇒ 写成四个并列出名字；「波次」那句"本波总级别既不会超出预算、也不会差零头"从 v0.1.75 起对末波不成立 ⇒ 改成"除末波保底之外…"，并把两段保底补齐（末波每种各一只**可超预算** > 大波补 `min(unit, budget - sum)` 只 `CFG.wave.bigSeed` **受预算截断** > 加权补怪，`unit` 复用同一式子、没有第二套公式；`bigSeed` 是写死的 key、不受本关 `spawnTable` 约束；那个 `min` 比的是只数 vs 剩余额度，只在 `bigSeed` 是 `level: 1` 时才等价于级别不超；两段刷出来的怪逐只累进 `state.waveHp` 分母）；「牛奶」补 `CFG.milk.halo`；`加一关` 的"上面那九项"改成十项；`改数值` 新增第 4 条"加一枚奖励"（原 CFG 那条顺移成第 5）并在 CFG 清单里补 `bigSeed` / `CFG.reward` / `CFG.milk.halo`
+- **数值全部回代码取真值**（不信日志）：`CFG.milk.halo` 写 v0.1.78 之后的 `0.7 / 0.30`、`burst.hold 0.2`（v0.1.73）、`cer.fly 3`（v0.1.74）、`test1.waves 10`（v0.1.72 ⇒ 它的第 10 波同时是唯一的大波兼末波，就拿这个当两段保底优先级的例子）、保底顺序按 v0.1.77 对调后的现状、`INFO.milk.value 25` 与 `moneybag.milk 250` 推 10 颗、`index.html` 的六个 `<script>` 顺序、`clears.js` / `test.js` / `save.js` / `game.js` 里 `rewardKey` / `stopped` / 四处输入屏蔽 / `applyRunText` 的归一化各读取点
+- **约定段**：`firstReward` 进"默认无也要明写 `null`"那一档（与 `bgm` / `startMilk` / `armor1` / `armor2` 同口径），奖励的 `milk` 进"能力开关"那一档；`> 二类防具还差一个字段` 那条**原样没动**——`armors` 至今没有 `hitbox`、也没有怪物挂 `armor2`，所以"要不要补 `hitbox`"仍然挂着等你发话；「已知未完成」新增一条"首通奖励的分岔还没实测"（两关 `firstReward` 都是 `null`，`rewardKey()` 的未通关分支与不带 `milk` 的奖励都只在沙箱里跑过，`apollo7s:cleared` 也没有任何查看入口）
+- 未动：`update_7sRef.md`（文档对账不是玩家可感的改动）；`index.html`、`game.js`、`save.js`、`clears.js`、`info/info.js`、`scenes/test.js` 一字未改
+- **push 说明**：这次提交把并行会话 v0.1.71–v0.1.78 的工作区改动一起带上（含两个此前未跟踪的文件 `clears.js` 与 `images/others/moneybag.png` —— 少了 `clears.js` 线上会 404 且启动直接断），推 `main` 等于给 Pages 发新版
+- 验证：`git status --short` 与逐文件 diff 复查无凭据类内容；本轮没有改动 js，语法检查沿用各轮自己的 `vm.Script` 结论
+
+## v0.1.78（2026-10-27）
+- 按你「将 milk 的光晕加深一点」——`CFG.milk.halo.alpha 0.22 → 0.30`（game.js:35）。只动浓度这一个数：`radius 0.7`、`color '255,255,255'` 未改（"加深"不是"变大"，范围保持 v0.1.75 定的那圈）
+- 读取点唯一：牛奶渲染循环 test.js:1515 的 `CFG.milk.halo`，它只喂给光晕那圈渐变的第一个色停，所以改动不外溢到牛奶本体、影子或判定
+- 参照：伙伴产奶前的金光 `alpha 0.8`、钱袋金光 `0.55` ⇒ 现在这圈白光在两者之下、比上一版明显一点。还想再深就直接调这一个数
+- 快速模式下的过期淡出不受影响（淡出走 `ctx.globalAlpha`，与这圈的 `hl.alpha` 相乘）
+- `game.js` 过 `vm.Script`；观感由你实测
+- `update_7sRef.md` 双写：顶部新开 `## 2026-10-27 · 牛奶光晕加深`；v0.1.75 那节"小而淡"的描述留作历史
+- `README.md` 未改（滞后清单不变，仍是五处）
+
+---
+
+## v0.1.77（2026-10-27）
+- 按你「更改顺序，最后一波时先刷新每种各一只，再刷新固定 n 只（受出怪量约束）」——`spawnWave`（test.js:417）里两段保底**整体对调**：`if (state.wave === lv.waves)` 的每种一只在前，`if (isBigWave(state.wave))` 的固定 n 只在后，`while` 仍在最后。两段内部一字未改（`seed = Math.min(unit, budget - sum)`、`sum += level`、`state.waveHp += monWaveHp(m)` 都是原样搬动），`CFG.wave.bigSeed` 与其余常数没碰
+- **语义变化只发生在"既是大波又是末波"的那一波**：固定 n 只现在排在末波保底之后，于是它受的是**扣掉保底之后**的剩余额度约束；末波保底（可超预算）一旦把 `sum` 抬过 `budget`，`Math.min(unit, budget - sum)` 就是负数，`for` 一次不进 ⇒ **这一波的大波保底完全不刷**。优先级从此是：末波保底 > 大波固定 n 只 > 加权补怪
+- **沙箱实测**（真 `spawnWave` + 真数据，4000 次）：
+  - 非末波的波次逐字不变：场景2 第 10 波仍是企鹅 4~10 / 只数 6~10 / 级别 10，第 20 波 8~16 / 11~17 / 18，第 29 波与上一版同分布（只数 2~8、覆盖 1563/4000）——这些波末波段根本不进，对调无影响
+  - 场景2 第 30 波（大波+末波，额度 20，n=8）：只数 13~16、企鹅 10~14、总级别恒为 20、三种各至少一只仍 100% ⇒ **与 v0.1.76 的分布相同**（保底和 7 没吃掉 8 只企鹅的额度，`min(8, 20-7)` 仍是 8），改的只是出怪数组里的先后（现在开头三只是 `chunipenguin, chunipenguin_prs, chunipenguin_ftr`）与行计数器的推进顺序
+  - 场景1 第 10 波（大波+末波，额度 10）：仍是 10 只、级别 10，无变化
+  - 差别被放大的验证：临时 `test1.spawnMul = 0.3`（额度 3）时，末波保底先花掉 1+2+4=7 ⇒ 大波段**一只都不补**，该波总只数 **3 只 / 级别 7**；换成 v0.1.76 的旧顺序则是 6 只 / 级别 10。所以"受出怪量约束"现在是真的会让位于末波保底
+- `scenes/test.js` 过 `vm.Script`；未开浏览器，末波构成由你实测
+- `update_7sRef.md` 双写：顶部新开 `## 2026-10-27 · 末波保底优先于大波保底`；v0.1.76 那节写的"先刷 n 只再每种一只"留作历史
+- `README.md` 未改（滞后清单不变，仍是 v0.1.76 末尾列的那五处）
+
+---
+
+## v0.1.76（2026-10-27）
+- 按你「大波时必定先刷新 n=min(ceil(波次/3),8) 只中二企鹅（普通），再进 while 抽其他怪；这条刷新会被出怪量限制」
+- **新常数 `CFG.wave.bigSeed: 'chunipenguin'`**（game.js:19，紧跟 `bigMul`）——大波保底刷的那只怪的 key，你要换成别的怪只改这里
+- **`spawnWave`（test.js:417）**：在 `budget = Math.ceil(...)` 之后、v0.1.75 那段末波保底之前插入 `if (isBigWave(state.wave))` 的刷怪段，`seed = Math.min(unit, budget - sum)` 只 `bigSeed`，每只同样 `sum += level`、`state.waveHp += monWaveHp(m)`，然后才轮到末波保底段与原来的 `while`。**`n` 直接复用现成的 `unit`**（`unit = Math.min(Math.ceil(state.wave / CFG.wave.div), CFG.wave.cap)` 就是你写的式子，`div 3 / cap 8`，没有新增第二套公式）
+- **"会被出怪量限制"落成 `Math.min(unit, budget - sum)`**：与末波保底那条"可以突破预算"形成对照，这里超了就截。沙箱验证截断真的生效：把 `test1.spawnMul` 临时压到 0.3 时预算=3 而 `unit`=4 ⇒ 只刷 3 只（第 4 只普通企鹅是末波保底补的，因为那条允许超）。口径上这个 `min` 比的是**只数 vs 剩余额度**，只有在 `bigSeed` 是 `level: 1` 时才等价于"级别不超"；将来把 `bigSeed` 换成 2 级怪，这批保底自己就能超预算（沙箱里 budget 3、级别和 14），到时候要么改成按 `Math.floor((budget - sum) / level)` 截，要么由你确认——现在没写，因为你点的是普通企鹅
+- **两段保底的先后**：大波段在前、末波段在后（你那句"必定先刷新……再进 while"），所以某一波既是大波又是末波时（场景1 第 10 波、场景2 第 30 波）顺序是 n 只普通企鹅 → 出怪表每种各一只 → 加权补满。副作用：普通企鹅会被两段各算一次，末波保底那一只并不因为前面已经刷过企鹅就省掉
+- **沙箱实测**（真 `CFG.wave` + 真 `INFO` + 真 `spawnWave/pickMonster/pickRow/spawnMonster/monWaveHp`，新旧代码各 4000 次抽样）：
+  - 场景2 第 10 波（大波，额度 10，`unit` 4）：企鹅只数 **0~10 → 4~10**（至少 4 只成为必然），该波总级别仍恒为 10，只数 3~10 → 6~10
+  - 第 20 波（大波，额度 18，`unit` 7）：企鹅 **0~12 → 8~16**，总级别仍 18，只数 5~15 → 11~17
+  - 第 30 波（大波 + 末波，额度 20，`unit` 8 撞 `cap`）：企鹅 **2~10 → 10~14**，只数 7~14 → 13~16，总级别仍 20，三种怪各至少一只仍 100%
+  - 非大波（第 5/9/11/29 波）新旧分布逐字一致 ⇒ 闸门只管大波
+  - 场景1 全程无变化（出怪表只有普通企鹅 1 级，保底与抽出来的是同一种），第 10 波仍是 10 只 / 总级别 10
+  - 连带代价：额度先被企鹅占掉 `unit` 级，其他怪在**大波**露面的概率下降——第 10 波"三种都露面"从 50.0% → 25.4%，第 20 波从 87.5% → 76.5%
+- 注意 `bigSeed` **不受本关 `spawnTable` 约束**：写死的是怪物 key，所以将来哪一关的出怪表里没有普通企鹅，它的大波照样会冒出普通企鹅（当前两关都列了它，所以现在看不出差别）。要改成"只刷本关表里有的"是另一件事，没擅自动
+- 波次血量/催波分母 `state.waveHp` 把保底刷出来的每只一起累加，与分子同式，没有新口径；`isBigWave` 的判定与横幅时机未动
+- `game.js / scenes/test.js` 过 `vm.Script`；未开浏览器，构成由你实测
+- `update_7sRef.md` 双写：顶部新开 `## 2026-10-27 · 大波先刷一批普通企鹅`
+- `README.md` 未改，本轮新增一处滞后（连同 v0.1.75 的两处、v0.1.71 的三处一起等你下令）：:71 波次段完全没提"大波先刷 n 只普通企鹅"和"末波每种至少一只、可超预算"这两条新保底
+
+---
+
+## v0.1.75（2026-10-27）
+本轮两个点名项，一处数据 + 一处绘制 + 一处出怪逻辑。
+
+**1. 牛奶加白色光晕**
+- `CFG.milk` 新增 `halo: { radius: 0.7, alpha: 0.22, color: '255,255,255' }`（game.js:35，跟在 `arc` 之后）。口径与 `CFG.glow`（伙伴产奶前的金光 `radius 0.8 / alpha 0.8`）、`CFG.reward.halo`（钱袋金光 `1.1 / 0.55`）对齐，所以"比较小、比较淡"落成这两个数，你觉得刺眼就直接调 `radius / alpha`
+- 绘制只改一处：牛奶渲染循环（test.js:1503-1518）在 `drawImage(imgs.milk …)` 之前用 `createRadialGradient` 铺一圈 `rad = max(ms.w, ms.h) × halo.radius` 的圆，色停与 `drawReward`（:1215）完全同式。因为画在同一个 `ctx.globalAlpha` 里，**光晕跟着牛奶一起淡出**（临过期那 `CFG.milk.fade` 秒）而不是一块不透明的白
+- **覆盖范围 = `state.milks` 里的全部**，即自然掉落 `spawnMilk`、咪璐库 `produceMilk`、以及钱袋爆出的那 10 颗（三者本来就是同一个数组、同一处绘制）；要在空中停顿阶段不留光就得给爆出的奶单独加标记，未做，等你下令。**金牛奶 `state.gmilks` 没动**（另一条循环 :1488、另一种机制）
+- 点击判定、`hitPad`、下落、`arc`、20 秒过期、自动收集一概未动 —— 光晕是纯绘制，不进 `milkHit`
+
+**2. 最后一波保证每种怪至少一只，且可突破预算**
+- `spawnWave`（test.js:417）在 `budget = Math.ceil(...)` 之后、`while (sum < budget)` 之前插入：`if (state.wave === lv.waves)` 时先按 `lv.spawnTable` 的顺序每种各刷一只（走同一个 `pickRow()` + `spawnMonster(pickRow(), key, state.wave)`，并把 `level` 累进 `sum`、`monWaveHp(m)` 累进 `state.waveHp`），然后才让原来的补怪循环继续 —— 保底把 `sum` 抬过预算时 `while` 一次都不进，正是"突破出怪量的限制"
+- 判据用现成的 `state.wave === lv.waves`，与 `lastWaveSettled()`（:470）和"最后攻势"横幅同一条件；非末波代码路径一字未动
+- **沙箱实测**（把真实 `CFG.wave` + `INFO` + 真的 `spawnWave/pickMonster/pickRow/spawnMonster/monWaveHp` 塞进 vm 跑，新旧代码各 4000 次抽样对照）：
+  - 你举的例子原样复现：表 `{1,5,10}`、第 10 波预算 10 ⇒ **恰好 3 只、总级别 16、之后不补**（旧代码这里必然补到 20 级别）
+  - 更极端的：`spawnMul 0.5` 时预算 2、保底和 7 ⇒ 仍 3 只、总级别 7（超预算 3.5 倍），且**不会触发"过滤表为空 ⇒ `pickMonster` 抽不到东西"那条崩溃路径**（`while` 根本不进）
+  - 测试场景1 最后一波：改动前后都是 10 只、总级别 10（表里只有 1 种 1 级怪，保底那只本来就会出）
+  - 测试场景2 最后一波（第 30 波，预算 20，表 `1/2/4`）：总级别仍恒为 **20**（保底和 7 < 20，没超），但只数从 **5~16 收到 7~12**，三种怪各至少一只的概率 **91.1% → 100%**
+  - 非末波（第 29 波覆盖 1570/4000 vs 旧 1563/4000、第 5 波 0/4000 两边都一样）分布相同 ⇒ 确认闸门只管末波
+- 连带：末波的 `state.waveHp`（催波分母，`waveCutCheck` :449）把保底多出来的级别一起算进去，所以真出现超预算时，这一波要打掉更多东西才会提前催波 —— 分母与分子仍是同一式子，没有新口径
+- `game.js / scenes/test.js / info/info.js` 三个文件都过 `vm.Script`；未开浏览器，观感与末波构成由你实测
+- `update_7sRef.md` 双写：顶部新开 `## 2026-10-27 · 牛奶光晕 + 最后一波全员保底`
+- `README.md` 未改，新增两处滞后（连上轮三处一起等你下令再动）：:71 "本波总级别既不会超出预算、也不会差零头"现在对最后一波不成立（保底可超）；:72 牛奶那段没提 `CFG.milk.halo`
+
+---
+
+## v0.1.74（2026-10-27）
+- 按你「将点击奖励后飞向屏幕中心的时间拉长到 3s」——`CFG.reward.cer.fly 0.8 → 3`（game.js:28）。同条里的 `dur 5`（演出总时长）、`white 2`、`scaleTo 3`、`glowFrom/glowTo/glowAlpha/color` 一字未动
+- `fly` 全项目只有 `drawCeremony`（test.js:1227 `k = smooth(min(1, c.t / ce.fly))`）一个读取点，钱袋从掉落点插值到 `(CFG.W/2, CFG.H/2)` ⇒ 到位时刻 `0.8 秒 → 3.0 秒`，位移走的是现成的 `smooth()` 缓动，没有新常数
+- **连带后果（只讲时间，没动代码）**：白幕仍从 `dur - white = 3 秒` 起涨，所以"停在屏幕中央等白幕"这段从 **2.2 秒 → 0 秒**，钱袋到位的那一帧正好是白幕开始的那一帧。放大与光晕都由 `u = t / dur` 驱动，节奏没变 ⇒ 到位时（u=0.6）缩放已经是 `1 + (3-1)×0.6 = 2.2 倍`，而旧值到位时才 1.32 倍，看起来是"飞到中间时已经很大了"。快速模式（`dt = raw × 2`）下飞行实际 1.5 秒、整段演出实际 2.5 秒，与改动前一样是折半
+- 想把"停在中央"的窗口留住的话，动 `cer.dur`（例如 `5 → 7.2`，白幕会自动推到 5.2 秒起）；这是另一个数，本轮没碰，等你下令
+- `game.js` 过 `vm.Script`；未开浏览器，观感由你实测
+- `update_7sRef.md` 双写：顶部新开 `## 2026-10-27 · 结算飞行拉长到 3 秒`；v0.1.71 那节写的"约 5 秒""飞到屏幕正中"留作历史
+- `README.md` 未改（`cer` 的具体秒数它没写过；它滞后的仍是 v0.1.71 的三处：:13 载入顺序缺 `clears.js`、:34 文件表缺该文件、:74 的"判胜"表述）
+
+---
+
+## v0.1.73（2026-10-27）
+- 按你「将爆出牛奶后的停顿时间改为 0.2s」——`CFG.reward.burst.hold 0.5 → 0.2`（game.js:27）。同一条里的 `dur 0.2`（散开抛物线时长）与 `radius 130` 未动，`cer/arc/hitPad` 等一概没碰
+- 读取点唯一：`burstReward`（test.js:142）把 `b.hold` 写进每颗新爆出的奶，`updateGame` 的 `if (k.hold !== undefined)` 分支（:1862-1865）数完当帧 `collectMilk(k)` 起飞。`grep` 到的另外两处 `b.hold`（:1595 特效、:1959 横幅）各自属于 `state.effects` / `state.banners`，与奖励无关，没被这次改动波及
+- 可观测节奏（点击钱袋 ⇒ 10 颗奶开始飞向计数器）：弧线 `dur 0.2` + 空中停 `hold 0.5` = **0.7 秒 → 0.4 秒**；奶在进入 `hold` 分支的同一帧就 `state.milk += INFO.milk.value`，所以到账时刻也跟着提前 0.3 秒。计数器旁的 `CFG.milk.flyWait 0.2` 是"飞到之后停一下再消失"，不是起飞前的等待，未动
+- 计时走 `dt = raw * (opts.fast ? 2 : 1)`（test.js:1813）⇒ 快速模式下这 0.2 秒实际是 0.1 秒
+- `update_7sRef.md` 双写：顶部新开 `## 2026-10-27 · 钱袋爆奶的空中停顿缩短`；v0.1.71 那节里"悬停约 0.7 秒"的旧数值按你的惯例留作历史
+- `README.md` 未改（本轮没动它的任何口径，它目前滞后的仍是 v0.1.71 的三处：:13 载入顺序缺 `clears.js`、:34 文件表缺该文件、:74 的"判胜"表述）
+
+---
+
+## v0.1.72（2026-10-27）
+- 按你「场景1 改为 10 波次」——`INFO.tracklist.test1.waves 20 → 10`（info.js:215），**其他任何数值未动**（`spawnMul 1`、`startMilk 50`、`spawnTable` 仍只有 `chunipenguin`、`showMonsters/deckSelect` 照旧；test2 仍 30 波）。这正是 v0.1.71 交付回复里挂起待令的那条，现在按令执行
+- `waves` 全项目只有 6 个读取点，逐条连带（用真实 `CFG.wave` 值算的，非估算）：
+  - `isBigWave`（test.js:408 `w % bigEvery(10) === 0 || w === waves`）⇒ **第 10 波同时是大波与最后一波**，大波次数 `2（第10、20波）→ 1（第10波）`
+  - `spawnWave`（:427-431）预算 `unit = min(ceil(w/div 3), cap 8)` × `spawnMul 1` ×（大波则 `bigMul 2.5`）后取 `ceil` ⇒ 各波只数 **1,1,1,2,2,2,3,3,3,10**（旧 20 波为 …,10,…,7,18），全关总出怪 **94 → 28 只**；末波仍先挂"一大波敌人正在靠近"（`bigWarnGap 7000`）再挂"最后攻势"
+  - 波间隔（`randWaveGap` :433-436）：`first 19000` + 8 段 `gapMin~gapMax 25000~31000` + 1 段 `bigGap 52000` ⇒ 名义总时长 **548~650 秒 → 271~319 秒**（催波 `hpCut 0.65`/`cutGap`/`bigCutGap` 规则未变，实际会更短）
+  - 右下角进度条（:1568 `pct`、:1577 `total`）分母变 10；评级图标枚数 = 大波次数 ⇒ **2 枚 → 1 枚**
+  - 自然出怪闸门（:1818 `state.wave < lv.waves`）与 `lastWaveSettled`（:466 `state.wave === lv.waves`）
+- **旧档的可观测后果（按你「旧的存档先丢弃」的惯例，我没写任何兼容代码）**：test1 若已存到 `wave 11~20`，回来时 `state.wave < 10` 为假 ⇒ 不再出任何怪；而 `state.wave === 10` 为假 ⇒ `lastWaveSettled()` 永远不成立、奖励永远不掉，进度条靠 `Math.min(1, …)` 停在满格。想清掉：本关菜单里「重新开始」（走 `resetRun()`，`wave` 归 0），或直接删 localStorage 键 `apollo7s:save:test1`
+- 数据文件通过 `vm.Script` 求值复核：`test1.waves = 10 / test2.waves = 30`；未开浏览器，节奏由你实测
+- `README.md` 未改（`tracklist` 段里若写着 test1 的波次数需跟着改；本轮没动它是因为你没下令）
+- `update_7sRef.md` 双写：顶部新开 `## 2026-10-27 · 场景1 缩到 10 波`
+
+---
+
+## v0.1.71（2026-10-27）
+- 按交付说明「关卡首通奖励 + 结算演出（第 3 号需求）」一次实现；写前现读 `head -6 update.md`，头名是 **v0.1.70**（另一会话的 README 校对轮），本次落 **v0.1.71**
+- **数据 `info/info.js`**：`INFO.rewards` 新增于 :201（紧跟 `armors`，按 key 寻址、条目**不带 id**）——`moneybag: { name '钱袋', img 'images/others/moneybag.png', scale 1.00, milk 250 }`；`milk` 是能力开关型字段（无该效果的奖励行整行不写，与 `produce/burst/bullet` 同口径）。两关各加 `firstReward: null`（:216 / :228，默认无也明写）
+- **`CFG.reward`（game.js:22-29）**：`defaultKey 'moneybag'` / `rest { x: 1024, row: 2, dy: -223.2 }` / `hitPad 55` / `halo { radius 1.1, alpha 0.55, color '255,225,120' }` / `burst { dur 0.2, hold 0.5, radius 130 }` / `cer { dur 5, fly 0.8, white 2, scaleTo 3, glowFrom 260, glowTo 1180, glowAlpha 0.55, color '255,255,255' }`。尺寸、下落、抛物线全部复用 `CFG.milk`（`size 120`、`arc { dur 0.9, h 150, spread 70 }`），只有点击余量单列。**说明里的 `burst.count: 10` 没落地**：只数由 `milk / INFO.milk.value`（250/25=10）推导，不留两处真值
+- 装载与局内字段：game.js:289 补 `...Object.keys(INFO.rewards).map(k => loadImage('rew_' + k, ...))`；`makeRun` 加 `reward: null, ceremony: null`（:97-98）
+- **新文件 `clears.js`**：单键 `apollo7s:cleared`（不是每关一键，也不进 run 快照，因为 `resetRun()` 会覆盖），`initClears / isCleared / markCleared`，只认 `=== true`，脏数据一律当"没通过"、不抛错。`index.html:29` 插在 `save.js` 之后、`game.js` 之前
+- **存档**：`SAVE_KEYS` 末尾加 `'reward'`（save.js:2）；`applyRunText` 在拷贝循环后归一化（:54-58）——`reward` 缺失 / key 不在 `INFO.rewards` / x、y 非数字 ⇒ 整份丢弃为 `null`，丢弃后由每帧的 `rewardCheck()` 幂等补掉一次；另外把还在飞的 `arc` 就地结算（x、y 取 `tx/ty` 后置 `arc = null`），读档既不重播抛物线、也不会悬在半空。`ceremony` **不进** `SAVE_KEYS`；`hasRunRecord`（test.js:440）未动，`clock > 0` 已能让"奖励还在地上"的存档弹继续/重开面板
+- **触发**：`resultCheck`（test.js:456）里 `state.result = 'win'` 那行删除，条件原样搬进 `lastWaveSettled`（:464）；新增 `rewardCheck`（:469），调用顺序 `resultCheck()` → `rewardCheck()`（:2044-2045）保证判负优先
+- **与说明的两处偏离（都先在沙箱证明过，不是顺手改）**：
+  1. `rewardCheck` 的扫怪条件从说明的 `state.monsters.length > dying.length` 改成 `dying.length > 0`。原式在"场上全是临界值以下的怪"时不清场，于是 `state.monsters.length > 0` 直接 return ⇒ `dying` 永远为空 ⇒ `src` 永远 `null`，"从被扫掉的怪头顶抛出"这条主路径**不可达**，与说明自己 §4.1 的"清理无条件执行"矛盾。改后行为：最后一波了结时，临界值以下的怪一律删除（不进 `state.deaths`、不掉防具、不画影子），场上若还剩临界值以上的怪（含手动 `出怪` 的）就先不掉
+  2. `testClick` 的 `if (state.ceremony) return;` 放在**判负面板分支之后**（:1677）而不是紧跟 `state.loading`。原位置会卡死：演出途中被判负时 `updateGame` 停摆（ceremony 冻在白幕中途），而 `state.result` 面板的按钮也被这句 return 挡住、点不动。配套加了 game.js:154 `slot.ceremony = null`（`enterRun`）——演出既不进存档，也不该在内存里被"继续本关"带回
+- **掉落 / 拾取**：`rewardSize`（:84，`CFG.milk.size × scale` ⇒ 127.72×120，宽按 182×171 源图比例）；`spawnReward`（:96）与 `produceMilk` 同式——源点取被扫怪**贴图头顶**（直接用现成 `monsterBox` 的上沿，不再引入 `monSpriteH`），无源点时用 `CFG.reward.rest`；落点 `feetLine(row) - s.h/2`，`tx` 的 clamp 区间与奶完全相同；`rewardHit`（:111）判定框 = 尺寸 + `hitPad × 2`，弧线飞行途中也算命中；`pickupReward`（:119）顺序＝标记首通 → 先收场上存量奶 → 再 `burstReward`（反过来的话新炸的 10 颗会被紧随其后的 `if (!k.fly) collectMilk(k)` 立刻收走，"停在半空 0.5s"就没了）→ 建 `ceremony` → `bgm.pause()`
+- **共用抛物线**：抽出 `arcPoint`（:65）与 `stepArc`（:69），奶与奖励都走它（说明推荐的做法，没有复制两套）；奶的落点、`stopped`、淡出与 20s 过滤一字未改，`state.reward` 不在 `state.milks` 里 ⇒ 永不过期、`autoCollect` 也碰不到它（:28/:62/:1589 三处清扫均未扩展）
+- **钱袋爆奶**：`burstReward`（:130）沿上半圆弧铺 10 颗（`th ∈ (0, π)`、半径 130、`h: 0` ⇒ 那条抛物线退化成纯径向直线），`dur 0.2 + hold 0.5 = 0.7s` 后才开始飞计数器；奶循环新增 `hold` 分支（:1862-1865），优先于普通落地态；`collectMilk` 原样复用，10 颗 ⇒ +250
+- **停产闸门**：`const stopped = !!(state.reward || state.ceremony)`（:1817），门控自然掉落（:1825）与咪璐库生产（:1921，`p.prodT` 就此冻住）；`resetRun()` 清 `reward/ceremony` ⇒ 下一局自动恢复
+- **演出**：`drawReward`（:1208，先径向金光圈后贴图，常亮不脉动）与 `drawCeremony`（:1223，`fly 0.8s` 用现成 `smooth` 飞到 `(1024, 576)` 后不再移动；`k = 1 + (scaleTo-1) × u` 全程线性放大到 3 倍；白光单圈渐变 260→1180，末帧刚盖到四角 √(1024²+576²)≈1175.9；最后 2s 全屏白 `clamp((t-3)/2)` 涨到 1.0，画在本层最上）插在横幅/入场 mark 之后、菜单面板之前（:1603-1604），判负面板仍在更后 ⇒ 压在白幕之上；`t >= CFG.reward.cer.dur` 时 `resetRun() → writeRun() → scene='menu'`（:2046-2052，落盘是干净新局，与"重新开始"同口径）。**世界不冻结**：loop 的 gate（game.js:260）没加 `ceremony`，计时用游戏时钟 ⇒ 快速模式整段 2.5s 真实时间
+- **输入屏蔽**：`testHover`（:1640 开头 return，光标 default）、`testClick`（:1677）、`testKey`（:1795 gate 补 `state.ceremony`）、`contextmenu`（game.js:246，`preventDefault` 之后）
+- **移除胜利提示框**：`uiRects` 删 `winBack`；面板文案固定 `'失败'`，只画 `loseBack / loseRetry`；`testHover`、`testClick` 的 `=== 'win' ?` 三元去掉，两支失败按钮逻辑原样；`state.result` 从此只有 `'lose'`；loop 与 `testKey` 的 `state.result` gate 保留
+- 自检（node-repl 的 vm 沙箱里跑**真实函数**，非另写一份）：`rewardSize` 127.72×120；`spawnReward(src@row2,x=1000)` 源点 y=522.80、落点 (987.07, 686.00)、`arc` 归 null（90 步 × 0.01s = 0.9s）；`spawnReward(null)` = (1024, 522.8)；clamp 区间 [251.86, 1924.14]；混合场（2 垂死 + 1 手动健康）⇒ 垂死的当帧消失且 `deaths`/`drops` 均为 0、不掉奖励；全场皆垂死 ⇒ `src` 取最右那只（x=1200、row 4 头顶 894.80、落点 1058）；`state.result` 存在时 `rewardCheck` 连怪都不删；拾取瞬间 milk 50→75（存量那颗）、炸奶在 **0.70s** 一次 +250、合计 325、`milkShown` 同步 325、奶数组最终清空；`clears` 落盘 `{"test1":true}`；临时塞一颗无 `milk` 字段的假奖励验证解锁型路径 ⇒ 不炸奶、奶量不变、仍标记首通；六个 JS 文件（含新增 `clears.js`）全过 `vm.Script`；未开浏览器，效果由你验
+- **没做的一条**：说明 §10 提到"test1 改 10 波的连带（已确认接受）… 除 `waves: 20 → 10` 外不动其他数值"，但 §1–§8 的需求清单里没有这一条，当前数据仍是 `waves: 20`，故**未改**；要改请下令
+- `README.md` 未改（本轮之后新增：`INFO.rewards`、`tracklist.firstReward`、`CFG.reward`、`clears.js` 与载入顺序、存档新增 `reward` 键、"胜负"一段应改成"掉奖励 + 演出结算"、操作表新增"点击奖励领取"）
+- `update_7sRef.md` 双写：顶部新开 `## 2026-10-27 · 关卡首通奖励与结算演出`
+
+---
+
 ## v0.1.70（2026-10-27）
 - 按你「对 README 做一次检查和修正，然后 push 项目」——纯文档轮，**代码一行没动**。README 上次整体校对是 v0.1.52，之后 v0.1.53–v0.1.69 的改动没回填过，这次逐条对着 `info/info.js`、`game.js` 的 `CFG`、`scenes/test.js` 重读一遍，纠偏 8 处、补全 6 处
 - **改掉的错**：①怪物段那句"死亡当帧移除、不留尸体"已经不成立（v0.1.61 起零血量进 `state.deaths` 播倒地），改成"`hp <= 0` 当帧离开 `state.monsters`，所以清场/催波/判负仍等价于数组为空，地上的尸体与残骸不参与任何判定"；②"预算永远是整数**只**"是我 v0.1.57 自己写错的措辞，预算是整数**级别**不是只数 —— test2 混了 1/2/4 级后同样预算出的只数会变少，test1 全 1 级才恰好相等；③`weight / tier / level` 三合一那句里 **`tier` 其实代码完全不读**（全项目 grep 只有数据文件命中），降级成"只是标签"；④"加一只怪"清单还列着怪物的 `flip`，而 v0.1.62 已经把它从怪物数据删掉了（朝向烘进贴图），改成要求"贴图朝左 + 不穿防具也明写 `armor1: null / armor2: null`"；⑤`sounds/` 目录行漏了 `躯樹の墓守.mp3`（场景2 现役曲）；⑥"已知未完成"里"三段式卡没有视觉区分"与代码不符（`emergeRatio` 让未激活只露上半截、出土中升满、已激活全貌），改成"只靠露出多少体现、没有倒计时/高亮这类显式标识"；⑦"怪物受击动画"已经做完（闪白+倒地+防具掉落），从待办里摘掉；⑧催波那句补上分子分母同式 `monWaveHp = hp + a1hp × armor1Weight + a2hp × armor2Weight`
