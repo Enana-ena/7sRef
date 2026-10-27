@@ -173,7 +173,7 @@ function burstDamage(p) {
     const fy = bx.y + bx.h / 2;
     if (fy < y0 || fy > y1) continue;
     const nd = state.drops.length;
-    hurtArea(m, b.damage);
+    hurtArea(m, b.damage, !!CARDS[p.card].info.ash);
     if (m.hp <= 0) {
       m.noCorpse = true;
       state.drops.length = nd;
@@ -258,8 +258,46 @@ function slotRect(i) {
   return { x: c.x + i * (c.w + CFG.cardGap), y: c.y, w: c.w, h: c.h };
 }
 
+function isConveyor(k) {
+  return INFO.tracklist[k === undefined ? state.slot : k].conveyor === true;
+}
+
+function slotCount(k) {
+  const lv = INFO.tracklist[k === undefined ? state.slot : k];
+  return lv.cardSlots === undefined ? getSlots() : lv.cardSlots;
+}
+
+function netRect() {
+  const n = isConveyor() ? CFG.belt.cells : slotCount();
+  const c = CFG.cardSlot;
+  return { x: c.x + n * (c.w + CFG.cardGap) + CFG.cardGap, y: CFG.netSlot.y, w: CFG.netSlot.w, h: CFG.netSlot.h };
+}
+
+function beltSpan() {
+  return CFG.belt.cells * (CFG.cardSlot.w + CFG.cardGap) - CFG.cardGap;
+}
+
+function beltX(i) {
+  return CFG.belt.x + i * (CFG.cardSlot.w + CFG.cardGap);
+}
+
+function beltItemAt(x, y) {
+  const b = CFG.belt;
+  const s = CFG.cardSlot;
+  for (let i = 0; i < state.belt.length; i++) {
+    const it = state.belt[i];
+    if (inRect({ x, y }, { x: it.x, y: b.y, w: s.w, h: s.h }) && inRect({ x, y }, { x: b.x, y: b.y, w: beltSpan(), h: s.h })) return i;
+  }
+  return -1;
+}
+
+function heldCard() {
+  if (isConveyor()) return state.beltSel >= 0 ? CARDS_BY_ID[state.belt[state.beltSel].id] : null;
+  return state.selected === null ? null : CARDS[state.deck[state.selected]];
+}
+
 function slotAt(x, y) {
-  for (let i = 0; i < CFG.cardSlots; i++) {
+  for (let i = 0; i < slotCount(); i++) {
     if (state.deck[i] === null) continue;
     if (inRect({ x, y }, slotRect(i))) return i;
   }
@@ -318,7 +356,17 @@ function hurtBody(m, dmg) {
   m.hp -= dmg;
 }
 
-function hurtArea(m, dmg) {
+function makeAsh(m) {
+  return { type: m.type, x: m.x, row: m.row, t: 0, a1: !!m.a1hp, a2: !!m.a2hp };
+}
+
+function ashKill(m) {
+  m.hp = 0;
+  state.ashes.push(makeAsh(m));
+}
+
+function hurtArea(m, dmg, ash) {
+  if (ash && dmg > m.hp) { ashKill(m); return; }
   const hf = CFG.monster.hitFlash;
   m.hitT = hf;
   if (m.a2hp) {
@@ -366,11 +414,15 @@ function spawnMonster(row, key, wave) {
   return m;
 }
 
+function manualSpawn() {
+  spawnMonster(pickRow(), INFO.tracklist[state.slot].spawnTable[0], 0);
+}
+
 function rowWeight(i) {
   const w = 1 / CFG.rows;
   const pl = (6 * state.rowLast[i] * w + 6 * w - 3) / 4;
   const psl = (state.rowSecondLast[i] * w + w - 1) / 4;
-  return w * Math.min(Math.max(pl + psl, 0), 1);
+  return w * Math.min(Math.max(pl + psl, 0.01), 100);
 }
 
 function pickRow() {
@@ -398,6 +450,74 @@ function pickMonster(table) {
     if (r < 0) return k;
   }
   return table[table.length - 1];
+}
+
+const BELT_ADJUST = {};
+
+function beltCount(id) {
+  let n = 0;
+  for (const b of state.belt) if (b.id === id) n++;
+  return n;
+}
+
+function beltWeight(id) {
+  const cp = CFG.belt.countPenalty, pv = CFG.belt.penaltyValues, n = beltCount(id);
+  const base = INFO.tracklist[state.slot].beltTable.find(e => e.id === id).weight;
+  const tier = n >= cp[1] ? pv[1] : n >= cp[0] ? pv[0] : base;
+  const pen = state.beltLast === id ? Math.pow(CFG.belt.lastMul, state.beltLayers) : 1;
+  return tier * pen;
+}
+
+function pickBeltId() {
+  const lv = INFO.tracklist[state.slot];
+  const f = BELT_ADJUST[state.slot];
+  let total = 0;
+  const ws = lv.beltTable.map(e => {
+    const bctx = { id: e.id, weight: beltWeight(e.id), belt: state.belt, plants: state.plants, monsters: state.monsters, clock: state.clock, milk: state.milk, count: beltCount };
+    const a = f ? f(e.id, bctx) : undefined;
+    const wv = a === undefined ? beltWeight(e.id) : a;
+    total += wv;
+    return wv;
+  });
+  let r = Math.random() * total;
+  for (let i = 0; i < ws.length; i++) {
+    r -= ws[i];
+    if (r < 0) return lv.beltTable[i].id;
+  }
+  return lv.beltTable[lv.beltTable.length - 1].id;
+}
+
+function beltPush() {
+  const lv = INFO.tracklist[state.slot];
+  let id;
+  if (state.beltPresetAt < lv.beltPreset.length) {
+    id = lv.beltPreset[state.beltPresetAt];
+    state.beltPresetAt++;
+  } else id = pickBeltId();
+  if (state.beltLast === id) state.beltLayers++;
+  else {
+    state.beltLast = id;
+    state.beltLayers = 1;
+  }
+  state.belt.push({ id, x: CFG.belt.x + beltSpan() });
+}
+
+function updateBelt(dt) {
+  const b = CFG.belt;
+  state.beltScroll = (state.beltScroll + b.speed * dt) % (CFG.cardSlot.w + CFG.cardGap);
+  for (let i = 0; i < state.belt.length; i++) {
+    const it = state.belt[i];
+    it.x -= b.speed * dt;
+    const lim = beltX(i);
+    if (it.x < lim) it.x = lim;
+  }
+  if (state.belt.length < b.cells) {
+    state.beltT += dt;
+    if (state.beltT >= (state.belt.length > b.overAt ? b.interval.over : b.interval.normal)) {
+      state.beltT = 0;
+      beltPush();
+    }
+  }
 }
 
 function showBanner(text, hold) {
@@ -528,7 +648,6 @@ function uiRects() {
   const rbY = rp.y + 150;
   return {
     menuBtn,
-    spawnBtn: { x: menuBtn.x - 16 - 208, y: 24, w: 208, h: 72 },
     panel,
     optRow: i => ({ x: panel.x + 60, y: panel.y + 140 + i * 100, w: panel.w - 120, h: 60 }),
     quitBtn: { x: bx, y: rowY, w: btnW, h: 64 },
@@ -557,6 +676,7 @@ function resetRun() {
   state.monsters = [];
   state.deaths = [];
   state.drops = [];
+  state.ashes = [];
   state.reward = null;
   state.ceremony = null;
   state.bullets = [];
@@ -571,6 +691,13 @@ function resetRun() {
   state.camX = 0;
   state.lineup = [];
   state.flights = [];
+  state.belt = [];
+  state.beltT = 0;
+  state.beltLast = null;
+  state.beltLayers = 0;
+  state.beltPresetAt = 0;
+  state.beltSel = -1;
+  state.beltScroll = 0;
   state.clock = 0;
   state.wave = 0;
   state.waveGap = CFG.wave.first;
@@ -595,14 +722,14 @@ function coolStart(info) {
   return info.cd === 'slow' || info.cd === 'very slow' ? INFO.cdTiers[info.cd] * INFO.cdFirst : 0;
 }
 
-function fullDeck() {
+function fullDeck(k) {
   const d = [];
-  for (let i = 0; i < CFG.cardSlots; i++) d.push(i < CARDS.length ? i : null);
+  for (let i = 0; i < slotCount(k); i++) d.push(i < CARDS.length ? i : null);
   return d;
 }
 
-function emptyDeck() {
-  return Array(CFG.cardSlots).fill(null);
+function emptyDeck(k) {
+  return Array(slotCount(k)).fill(null);
 }
 
 function deckCool(d) {
@@ -610,7 +737,7 @@ function deckCool(d) {
 }
 
 function deckTarget() {
-  return Math.min(CFG.cardSlots, CARDS.length);
+  return Math.min(slotCount(), CARDS.length);
 }
 
 function deckPicked() {
@@ -690,7 +817,8 @@ function buildLineup() {
 }
 
 function needPick() {
-  return INFO.tracklist[state.slot].deckSelect !== false && CFG.cardSlots < CARDS.length;
+  if (isConveyor()) return false;
+  return INFO.tracklist[state.slot].deckSelect !== false && slotCount() < CARDS.length;
 }
 
 function beginRun() {
@@ -702,7 +830,7 @@ function beginRun() {
 }
 
 function beginDeck(pick) {
-  state.deck = pick ? emptyDeck() : fullDeck();
+  state.deck = (pick || isConveyor()) ? emptyDeck() : fullDeck();
   state.cool = deckCool(state.deck);
   state.lineup = buildLineup();
   state.camX = 0;
@@ -812,7 +940,7 @@ function deckRemove(ui, at) {
   const back = state.deck[at];
   state.deck[at] = null;
   deckFly(back, ui.slots(at), poolCellRect(ui, back), CFG.deck.fly);
-  for (let k = at + 1; k < CFG.cardSlots; k++) {
+  for (let k = at + 1; k < slotCount(); k++) {
     const ci = state.deck[k];
     if (ci === null) continue;
     state.deck[k] = null;
@@ -993,7 +1121,7 @@ function deckClick(p) {
     confirmDeck();
     return;
   }
-  for (let i = 0; i < CFG.cardSlots; i++) {
+  for (let i = 0; i < slotCount(); i++) {
     if (state.deck[i] !== null && !flying(state.deck[i]) && inRect(p, ui.slots(i))) {
       deckRemove(ui, i);
       return;
@@ -1152,6 +1280,22 @@ function flashSprite(key, s) {
   return c;
 }
 
+const ashImgs = {};
+
+function ashSprite(key, s) {
+  if (ashImgs[key]) return ashImgs[key];
+  const c = document.createElement('canvas');
+  c.width = Math.ceil(s.w);
+  c.height = Math.ceil(s.h);
+  const g = c.getContext('2d');
+  g.drawImage(imgs[key], 0, 0, c.width, c.height);
+  g.globalCompositeOperation = 'source-in';
+  g.fillStyle = CFG.monster.ash.color;
+  g.fillRect(0, 0, c.width, c.height);
+  ashImgs[key] = c;
+  return c;
+}
+
 function drawArmor(m, key, hp, tint, flash) {
   if (!key || !hp) return;
   const a = INFO.armors[key];
@@ -1206,6 +1350,19 @@ function drawCorpse(c) {
   ctx.rotate(-k * d.angle * Math.PI / 180);
   ctx.drawImage(img, -px, py - s.h, s.w, s.h);
   ctx.restore();
+}
+
+function drawAsh(a) {
+  const mi = INFO.monsters[a.type];
+  const s = plantSize(imgs['enm_' + a.type], mi.scale);
+  ctx.drawImage(ashSprite('enm_' + a.type, s), a.x - s.w / 2, feetLine(a.row) - s.h, s.w, s.h);
+  const b = monsterBox(a);
+  for (const key of [a.a1 && mi.armor1, a.a2 && mi.armor2]) {
+    if (!key) continue;
+    const ar = INFO.armors[key];
+    const as = plantSize(imgs['arm_' + key], ar.scale);
+    ctx.drawImage(ashSprite('arm_' + key, as), b.x + ar.dx - as.w / 2, b.y + b.h / 2 + ar.dy - as.h / 2, as.w, as.h);
+  }
 }
 
 function drawDrop(f) {
@@ -1300,9 +1457,9 @@ function drawGrid(g) {
   }
 }
 
-function drawTopHud(pick) {
+function drawCardHud(pick) {
   const s0 = slotRect(0);
-  const s1 = slotRect(CFG.cardSlots - 1);
+  const s1 = slotRect(slotCount() - 1);
   const mp = CFG.milkSlot;
   ctx.fillStyle = 'rgba(70,50,25,0.65)';
   roundRect(mp.x - 16, mp.y - 12, mp.w + 32, mp.h + 24, 20);
@@ -1323,7 +1480,7 @@ function drawTopHud(pick) {
   ctx.textBaseline = 'middle';
   ctx.fillText(String(state.milkShown), mp.x + mp.w / 2, mp.y + mp.h - 34);
   const live = !state.deckPhase;
-  for (let i = 0; i < CFG.cardSlots; i++) {
+  for (let i = 0; i < slotCount(); i++) {
     const s = slotRect(i);
     const ci = state.deck[i];
     if (pick) {
@@ -1374,8 +1531,40 @@ function drawTopHud(pick) {
       ctx.lineWidth = 1;
     }
   }
+}
 
-  const ns = CFG.netSlot;
+function drawBelt() {
+  const b = CFG.belt;
+  const s = CFG.cardSlot;
+  const span = beltSpan();
+  const step = s.w + CFG.cardGap;
+  ctx.fillStyle = b.panelColor;
+  roundRect(b.x - 16, b.y - 12, span + 32, s.h + 24, 20);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.stroke();
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(b.x, b.y, span, s.h);
+  ctx.clip();
+  ctx.fillStyle = b.stripe;
+  for (let x = b.x + step - state.beltScroll; x < b.x + span; x += step) ctx.fillRect(x, b.y, 2, s.h);
+  for (const it of state.belt) {
+    const card = CARDS_BY_ID[it.id];
+    ctx.drawImage(imgs['card_' + card.key], it.x, b.y + CFG.cardFace.offset, s.w, s.w);
+    ctx.strokeStyle = CFG.cardFace.ring;
+    ctx.lineWidth = CFG.cardFace.ringW;
+    roundRect(it.x, b.y, s.w, s.h, CFG.cardFace.ringR);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  }
+  if (state.beltSel >= 0) drawPickRing({ x: state.belt[state.beltSel].x, y: b.y, w: s.w, h: s.h });
+  ctx.restore();
+}
+
+function drawTopHud(pick) {
+  if (isConveyor()) drawBelt(); else drawCardHud(pick);
+  const ns = netRect();
   ctx.fillStyle = 'rgba(70,50,25,0.65)';
   roundRect(ns.x - 16, ns.y - 12, ns.w + 32, ns.h + 24, 20);
   ctx.fill();
@@ -1428,7 +1617,8 @@ function render() {
   drawFieldBg(state.camX);
   drawGrid(g);
 
-  if (state.selected !== null) {
+  const held = heldCard();
+  if (held) {
     const cell = cellAt(state.mouse.x, state.mouse.y);
     if (cell && cell.col < CFG.plantCols) {
       ctx.fillStyle = canPlant(cell) ? 'rgba(80,255,120,0.30)' : 'rgba(255,70,70,0.30)';
@@ -1499,6 +1689,7 @@ function render() {
 
   for (const f of state.drops) drawDrop(f);
   for (const c of state.deaths) drawCorpse(c);
+  for (const a of state.ashes) drawAsh(a);
 
   for (const b of state.gmilks) {
     const r = gmilkRect(b);
@@ -1540,7 +1731,7 @@ function render() {
   }
   ctx.globalAlpha = 1;
 
-  if (state.selected !== null) {
+  if (held) {
     ctx.strokeStyle = 'rgba(255,40,40,0.9)';
     ctx.lineWidth = 4;
     for (const m of state.monsters) {
@@ -1553,31 +1744,36 @@ function render() {
 
   if (state.deckPhase !== 'count' || needPick() || state.deckT >= CFG.deck.milkAt) drawTopHud(false);
 
-  if (state.selected !== null) {
-    const sel = CARDS[state.deck[state.selected]];
-    drawPartner(state.mouse.x, state.mouse.y, 0.6, imgs['ptn_' + sel.key], sel.info.scale, sel.info.flip);
+  if (held) {
+    drawPartner(state.mouse.x, state.mouse.y, 0.6, imgs['ptn_' + held.key], held.info.scale, held.info.flip);
   }
 
   if (!state.menuOpen) {
+    const nr = netRect();
     const hi = slotAt(state.mouse.x, state.mouse.y);
+    const bi = beltItemAt(state.mouse.x, state.mouse.y);
     if (hi >= 0) {
       const s = slotRect(hi);
       const lines = [CARDS[state.deck[hi]].info.name];
       if (!state.opts.noCool && state.cool[hi] > 0) lines.push('重新装填中...' + Math.ceil(state.cool[hi]) + ' s');
       drawTip(s.x + s.w / 2, s.y + s.h + 8, lines);
-    } else if (inRect(state.mouse, CFG.netSlot)) {
-      drawTip(CFG.netSlot.x + CFG.netSlot.w / 2, CFG.netSlot.y + CFG.netSlot.h + 8, ['断网']);
+    } else if (bi >= 0) {
+      const s = CFG.cardSlot;
+      const b = CFG.belt;
+      drawTip(state.belt[bi].x + s.w / 2, b.y + s.h + 8, [CARDS_BY_ID[state.belt[bi].id].info.name]);
+    } else if (inRect(state.mouse, nr)) {
+      drawTip(nr.x + nr.w / 2, nr.y + nr.h + 8, ['断网']);
     }
   }
 
   if (state.net) {
+    const nr = netRect();
     ctx.globalAlpha = 0.6;
-    ctx.drawImage(imgs.net_err, state.mouse.x - CFG.netSlot.w / 2, state.mouse.y - CFG.netSlot.h / 2, CFG.netSlot.w, CFG.netSlot.h);
+    ctx.drawImage(imgs.net_err, state.mouse.x - nr.w / 2, state.mouse.y - nr.h / 2, nr.w, nr.h);
     ctx.globalAlpha = 1;
   }
 
   const ui = uiRects();
-  drawButton(ui.spawnBtn, '出怪');
   drawMenuBtn(!state.deckPhase);
 
   if (!state.deckPhase) {
@@ -1670,7 +1866,7 @@ function testHover() {
     return;
   }
   const ui = uiRects();
-  let ptr = slotAt(state.mouse.x, state.mouse.y) >= 0 || inRect(state.mouse, ui.menuBtn) || inRect(state.mouse, ui.spawnBtn) || inRect(state.mouse, CFG.netSlot) || milkAt(state.mouse.x, state.mouse.y) >= 0 || rewardHit(state.mouse);
+  let ptr = slotAt(state.mouse.x, state.mouse.y) >= 0 || inRect(state.mouse, ui.menuBtn) || inRect(state.mouse, netRect()) || beltItemAt(state.mouse.x, state.mouse.y) >= 0 || milkAt(state.mouse.x, state.mouse.y) >= 0 || rewardHit(state.mouse);
   if (state.menuOpen) ptr = inRect(state.mouse, ui.menuBtn) || inRect(state.mouse, ui.resumeBtn) || inRect(state.mouse, ui.restartBtn) || inRect(state.mouse, ui.quitBtn) || OPTS.some((o, i) => inRect(state.mouse, ui.optRow(i)));
   if (state.confirmRestart) ptr = inRect(state.mouse, ui.confirmYes) || inRect(state.mouse, ui.confirmNo);
   if (state.resumeAsk) ptr = inRect(state.mouse, ui.resumeBack) || inRect(state.mouse, ui.resumeRestart) || inRect(state.mouse, ui.resumeGo);
@@ -1773,13 +1969,28 @@ function testClick(p) {
     collectMilk(state.milks[mi]);
     return;
   }
-  if (inRect(p, ui.spawnBtn)) {
-    spawnMonster(pickRow(), INFO.tracklist[state.slot].spawnTable[0], 0);
-    return;
-  }
-  if (inRect(p, CFG.netSlot)) {
+  if (inRect(p, netRect())) {
     state.net = !state.net;
     state.selected = null;
+    state.beltSel = -1;
+    return;
+  }
+  if (isConveyor()) {
+    const bi = beltItemAt(p.x, p.y);
+    if (bi >= 0) {
+      state.beltSel = state.beltSel === bi ? -1 : bi;
+      state.net = false;
+      return;
+    }
+    if (state.beltSel < 0) return;
+    const cell = cellAt(p.x, p.y);
+    if (canPlant(cell)) {
+      const ci = cardBySlotId(state.belt[state.beltSel].id);
+      const info = CARDS[ci].info;
+      state.plants.push({ row: cell.row, col: cell.col, card: ci, atkT: info.bullet ? randAtk(info) : 0, prodT: info.produce ? randRange(info.produce.firstMin, info.produce.firstMax) : 0, lifeT: info.life || 0, placeT: 0, armT: 0, hitT: 0, hp: info.hp });
+      state.belt.splice(state.beltSel, 1);
+      state.beltSel = -1;
+    }
     return;
   }
   const si = slotAt(p.x, p.y);
@@ -1813,13 +2024,15 @@ function testKey(e) {
   if (state.deckPhase) return;
   if (e.key === 'Escape') {
     state.selected = null;
+    state.beltSel = -1;
     state.net = false;
     return;
   }
   if (e.repeat || state.loading || state.menuOpen || state.resumeAsk || state.confirmRestart || state.result || state.ceremony) return;
   if (e.key >= '1' && e.key <= '6') {
+    if (isConveyor()) return;
     const si = Number(e.key) - 1;
-    if (si >= CFG.cardSlots || state.deck[si] === null) return;
+    if (si >= slotCount() || state.deck[si] === null) return;
     const info = CARDS[state.deck[si]].info;
     if (state.opts.noCool || (state.milk >= info.costmilk && state.cool[si] <= 0)) {
       state.selected = state.selected === si ? null : si;
@@ -1830,6 +2043,7 @@ function testKey(e) {
   if (e.key === '`') {
     state.net = !state.net;
     state.selected = null;
+    state.beltSel = -1;
   }
 }
 
@@ -1846,7 +2060,8 @@ function updateGame(raw) {
     state.bigWarned = false;
     spawnWave();
   }
-  if (!stopped && state.clock - state.lastMilk > state.milkInterval) {
+  if (!stopped && isConveyor()) updateBelt(dt);
+  if (!stopped && !isConveyor() && state.clock - state.lastMilk > state.milkInterval) {
     state.lastMilk = state.clock;
     state.milkInterval = randMilkInterval();
     spawnMilk();
@@ -2047,6 +2262,9 @@ function updateGame(raw) {
   const dd = CFG.monster.death;
   for (const c of state.deaths) c.t += dt * c.sf;
   state.deaths = state.deaths.filter(c => c.t < dd.fall + dd.hold + dd.fade);
+  const ash = CFG.monster.ash;
+  for (const a of state.ashes) a.t += dt;
+  state.ashes = state.ashes.filter(a => a.t < ash.dur);
   const ad = CFG.armor.death;
   for (const f of state.drops) f.t += dt;
   state.drops = state.drops.filter(f => f.t < ad.fall + ad.hold + ad.fade);

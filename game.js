@@ -9,15 +9,22 @@ const CFG = {
   milkSlot: { x: 48, y: 24, w: 160, h: 160 },
   cardSlot: { x: 256, y: 24, w: 107, h: 160 },
   cardSlots: 6,
+  cardSlotsMax: 10,
   cardGap: 24,
+  belt: {
+    x: 256, y: 24, cells: 10, speed: 100,
+    interval: { normal: 4, over: 10 }, overAt: 8,
+    countPenalty: [3, 4], penaltyValues: [5, 1], lastMul: 0.5,
+    panelColor: 'rgba(70,50,25,0.65)', stripe: 'rgba(255,255,255,0.08)',
+  },
   cardFace: { offset: 8, costFont: 30, costPad: 22, costLow: '#ff4a4a', gray: 'rgba(120,120,120,0.55)', ring: 'rgba(235,235,235,0.7)', ringW: 2, ringR: 10 },
-  netSlot: { x: 1066, y: 24, w: 160, h: 160 },
+  netSlot: { y: 24, w: 160, h: 160 },
   menu: { btnW: 160, btnH: 64, btnY: 24, btnPad: 24, btnGap: 16 },
   levelName: { font: 26, color: '#ffe14d', padX: 24, padY: 12 },
   meter: { w: 260, padX: 24, padY: 12, gap: 16, anim: 0.6, frame: [2, 2, 155, 19], fill: [7, 33, 143, 11], inset: [5, 4], sync: { h: 47, src: [80, 80], pivot: [39.5, 39.5], dy: 0 }, mark: { h: 64, src: [112, 140], pivot: [55.5, 78], dy: -6, dyDone: -30 }, ranks: ['SSSp', 'SSS', 'SSp', 'SS', 'Sp', 'S'] },
   tip: { font: 26, lineH: 34, padX: 16, padY: 8, r: 10, bg: 'rgba(0,0,0,0.78)', border: 'rgba(255,255,255,0.35)' },
-  wave: { div: 3, cap: 8, bigEvery: 10, bigMul: 2.5, bigSeed: 'chunipenguin', first: 19000, gapMin: 25000, gapMax: 31000, bigGap: 52000, hpCut: 0.65, armor1Weight: 1.00, armor2Weight: 0.20, cutGap: 3000, bigCutGap: 9000, bigWarnGap: 7000, rowInit: 2 },
-  monster: { bleedGap: 0.033, bleedDmg: 1, slow: 0.5, slowColor: '#3a5c7a', slowAlpha: 0.55, feet: 81, hitFlash: 0.05, hitAlpha: 0.2, hitColor: '#ffffff', death: { fall: 0.3, hold: 0.5, fade: 0.3, angle: 90, slide: 40 } },
+  wave: { div: 3, cap: 8, bigEvery: 10, bigMul: 2.5, bigSeed: 'chunipenguin', first: 19000, gapMin: 25000, gapMax: 31000, bigGap: 52000, hpCut: 0.65, armor1Weight: 1.00, armor2Weight: 0.20, cutGap: 3000, bigCutGap: 9000, bigWarnGap: 7000, rowInit: 0 },
+  monster: { bleedGap: 0.033, bleedDmg: 1, slow: 0.5, slowColor: '#3a5c7a', slowAlpha: 0.55, feet: 81, hitFlash: 0.05, hitAlpha: 0.2, hitColor: '#ffffff', death: { fall: 0.3, hold: 0.5, fade: 0.3, angle: 90, slide: 40 }, ash: { dur: 2.5, color: '#000000' } },
   armor: { death: { fall: 0.15, hold: 0.5, fade: 0.3, run: 90, push: 0.45 } },
   reward: {
     defaultKey: 'moneybag',
@@ -43,6 +50,8 @@ const CFG = {
 CFG.grid.x = CFG.W - CFG.visibleCols * CFG.grid.cw;
 
 const CARDS = Object.keys(INFO.cards).map(key => ({ key, info: INFO.cards[key] }));
+const CARDS_BY_ID = {};
+for (const c of CARDS) CARDS_BY_ID[c.info.id] = c;
 
 const OPTS = [
   { key: 'fast', label: '快速模式' },
@@ -84,9 +93,16 @@ function makeRun(key) {
     mouse: { x: -200, y: -200 },
     selected: null,
     net: false,
-    deck: fullDeck(),
+    deck: fullDeck(key),
     deckPhase: null,
     deckT: 0,
+    belt: [],
+    beltT: 0,
+    beltLast: null,
+    beltLayers: 0,
+    beltPresetAt: 0,
+    beltSel: -1,
+    beltScroll: 0,
     camX: 0,
     lineup: [],
     flights: [],
@@ -94,6 +110,7 @@ function makeRun(key) {
     monsters: [],
     deaths: [],
     drops: [],
+    ashes: [],
     reward: null,
     ceremony: null,
     bullets: [],
@@ -102,7 +119,7 @@ function makeRun(key) {
     gmilks: [],
     milk: levelStartMilk(key),
     milkShown: levelStartMilk(key),
-    cool: deckCool(fullDeck()),
+    cool: deckCool(fullDeck(key)),
     opts: { fast: false, noNatural: false, noCool: false, autoCollect: false },
     menuOpen: false,
     confirmRestart: false,
@@ -245,6 +262,7 @@ canvas.addEventListener('contextmenu', e => {
   e.preventDefault();
   if (state.ceremony) return;
   state.selected = null;
+  state.beltSel = -1;
   state.net = false;
 });
 

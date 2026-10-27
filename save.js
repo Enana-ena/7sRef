@@ -1,5 +1,6 @@
 const SAVE_KEYS = ['clock', 'wave', 'waveGap', 'waveHp', 'bigWarned', 'banners', 'rowLast', 'rowSecondLast', 'lastSpawn', 'lastMilk', 'milkInterval', 'milkDropped', 'milk', 'milkShown',
-  'deck', 'cool', 'plants', 'bullets', 'milks', 'effects', 'gmilks', 'bgmAt', 'reward'];
+  'deck', 'cool', 'plants', 'bullets', 'milks', 'effects', 'gmilks', 'bgmAt', 'reward',
+  'belt', 'beltT', 'beltLast', 'beltLayers', 'beltPresetAt', 'beltSel', 'beltScroll', 'deaths', 'ashes'];
 
 const LS_PREFIX = 'apollo7s:save:';
 
@@ -45,12 +46,23 @@ function applyRunText(key, text) {
     return false;
   }
   if (!o || !Array.isArray(o.plants) || !Array.isArray(o.monsters) || !o.plants.every(p => CARDS[p.card]) || !o.monsters.every(m => INFO.monsters[m.type] && typeof m.speed === 'number') ||
-    !Array.isArray(o.deck) || o.deck.length !== CFG.cardSlots || !o.deck.every(ci => ci === null || CARDS[ci])) {
+    !Array.isArray(o.deck) || !o.deck.every(ci => ci === null || CARDS[ci])) {
     console.warn('存档数据无效 ' + key);
     return false;
   }
   const s = SLOTS[key];
   for (const k of SAVE_KEYS) if (o[k] !== undefined) s[k] = o[k];
+  const n = slotCount(key);
+  const oc = Array.isArray(o.cool) ? o.cool : [];
+  const deck = [];
+  const cool = [];
+  for (let i = 0; i < n; i++) {
+    deck.push(o.deck[i] === undefined ? null : o.deck[i]);
+    cool.push(typeof oc[i] === 'number' ? oc[i] : 0);
+  }
+  s.deck = deck;
+  s.cool = cool;
+  s.beltSel = Math.max(-1, Math.min(s.beltSel, s.belt.length - 1));
   if (!s.reward || !INFO.rewards[s.reward.key] || typeof s.reward.x !== 'number' || typeof s.reward.y !== 'number') s.reward = null;
   if (s.reward && s.reward.arc) {
     s.reward.x = s.reward.arc.tx;
