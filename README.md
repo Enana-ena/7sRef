@@ -2,9 +2,13 @@
 
 纯前端、无构建、无第三方依赖的 HTML5 Canvas 小游戏。所有数值与美术路径都写在数据文件里，改数据就能改玩法；逻辑按"一个场景一个文件"组织。当前版本号见 [update.md](update.md) 顶部（更新日志自 v0.0.1 起、一条指令一个版本号）。
 
+## 在线游玩
+
+**https://enana-ena.github.io/7sRef/** —— GitHub Pages，来源是 `main` 分支的仓库根目录（`Deploy from a branch`），推 `main` 就自动重新发布，没有构建步骤。根目录那枚空的 `.nojekyll` 是必需的：留着它 Pages 才会把 `sounds/World's end BLACKBOX.mp3`、`images/cards/card_らん.png` 这类带空格、括号和日文的文件名原样当静态文件发出去；删掉它 Pages 会走 Jekyll 构建，那些文件会被吞或转义成 404。
+
 ## 运行
 
-直接用 Chromium 系浏览器（Chrome / Edge）打开 [index.html](index.html) 即可，不需要服务器、不需要编译。
+直接用 Chromium 系浏览器（Chrome / Edge）打开 [index.html](index.html) 即可，不需要服务器、不需要编译；上面的 Pages 地址就是同一批文件直出，本地双击打开的效果一致（存档各存各的浏览器，互不相通）。
 
 - 载入顺序有依赖：`info/info.js` → `scenes/menu.js` → `scenes/test.js` → `save.js` → `game.js`。新增场景文件要插在 `game.js` 之前。
 - 「导入 / 导出」存档用的是 File System Access API（`window.showDirectoryPicker`），只有 Chromium 系支持；不支持时只在控制台警告，不影响游戏。
@@ -25,6 +29,7 @@
 
 ```
 index.html          画布 + 脚本载入
+.nojekyll           空文件，告诉 GitHub Pages 别跑 Jekyll（见「在线游玩」）
 game.js             CFG 全局可调参数、画布/输入/主循环、通用绘制函数
 save.js             存档快照、校验、localStorage 读写、导入导出
 info/info.js        数据：卡片 / 子弹 / 怪物 / 关卡 / 牛奶 / BGM
@@ -58,19 +63,21 @@ update_7sRef.md     面向玩家的内容日志（数值逻辑 / 修复 / UI美�
   - `flip: true` 只镜像场上贴图，卡面与源图不动。`effect` / `place` 描述特效图与缩放。
 - **怪物** `INFO.monsters`：`id`（100 段起，与伙伴 id 不冲突）、`hp`、`threshold`（不写则取 `Math.floor(hp / 3)`，见 `monThreshold`）、`atkInterval / atkDamage`（啃食节奏与单次伤害，减速时按 `CFG.monster.slow` 放慢）、`speedMin / speedMax`（每只出生掷一次，px/s）、`weight / tier / level` 决定出场分布与每波预算的计价单位，`scale` 是贴图缩放、`hitbox` 单独缩放碰撞箱（脚线不动，所以行判定不变）。血量低于自己的 `threshold` 后停止啃食、进入死亡状态，并按 `CFG.monster.bleedGap` 每跳掉 `bleedDmg` 点直到死；死亡或走出左边界当帧移除，不留尸体，所以"清场"等价于 `state.monsters.length === 0`。
 - **关卡** `INFO.tracklist`：`name`（右下角关卡名）、`bg`、`bgm`、`startMilk`、`waves`、`spawnMul`、`spawnTable`（按 `weight` 加权决定怪物种类）、`showMonsters` / `deckSelect` 组合出三种开局：选卡 → 只做阵容全景展示 + 自动配卡 → 直接进战斗。**约定：`deckSelect: true` 只在 `showMonsters: true` 时才有意义。** `bgm` / `startMilk` 用 `??` 退回全局默认（`INFO.bgm` / `INFO.milk.start`），所以 `startMilk: 0` 是合法值；`startMilk` 只作用于新开局的局与"重新开始"，读档回来的局按存档奶量恢复。
-- **波次** `CFG.wave`：首波 `first`，之后 `gapMin~gapMax` 随机，每 `bigEvery` 波和本关最后一波是大波（大波**之前**那一次等待 `bigGap`，剩 `bigWarnGap` 时给警告横幅）。每波数量预算 `min(ceil(wave / div), cap) × spawnMul`，大波再乘一次固定的 `bigMul`（2.5，不再随档位平方）。生成循环按怪物 `level` 累加、**到达预算即停**（级别全为 1 时只数 = 预算，预算带小数则向上进位到整数只）。出怪行按"上上波 / 上波"的行计数加权，避免连续堆同一行（`rowInit` 是这两个计数器的初值，必须播种，否则权重恒为 0）。催波：下一波不是大波时本波剩余血量低于 `hpCut` 就压到 `cutGap`，下一波是大波时场上全空压到 `bigCutGap`。所有计时走**游戏时钟**（`state.clock`），快速模式下真实时间折半。
+- **波次** `CFG.wave`：首波 `first`，之后 `gapMin~gapMax` 随机，每 `bigEvery` 波和本关最后一波是大波（大波**之前**那一次等待 `bigGap`，剩 `bigWarnGap` 时给警告横幅）。每波数量预算 `min(ceil(wave / div), cap) × spawnMul`，大波再乘一次固定的 `bigMul`（2.5，不再随档位平方），**最后对预算向上取整**，所以预算永远是整数只。生成循环按怪物 `level` 累加、**装不下的怪直接重抽**，因此本波总级别既不会超出预算、也不会差零头 —— 前提是出怪表里有一只 `level: 1` 的怪（见下方约定）。出怪行按"上上波 / 上波"的行计数加权，避免连续堆同一行（`rowInit` 是这两个计数器的初值，必须播种，否则权重恒为 0）。催波：下一波不是大波时本波剩余血量低于 `hpCut` 就压到 `cutGap`，下一波是大波时场上全空压到 `bigCutGap`。所有计时走**游戏时钟**（`state.clock`），快速模式下真实时间折半。
 - **牛奶** `INFO.milk`（起始值 / 单颗面值 / 上限）+ `CFG.milk`（掉落间隔公式的四个常数、下落速度、存活与淡出时间、点击判定余量、抛物线 `arc`、飞向计数器的动画）。自然掉落间隔 = `min(已掉落数量 × dropStep + dropBase, dropCap) + random × dropRand`（毫秒）。"自动收集"在勾选的那一瞬间就把场上所有未收集的奶记入账（含在落、在抛物线里的）。
 - **金牛奶** `state.gmilks`：每行一颗停在场地左缘，**未进入死亡状态**（`hp >= threshold`）的怪物贴到它就被"发射"，向右 `CFG.gmilk.speed` px/s 推进并清除沿途怪物，飞出右边界后消耗掉。它是最后一道防线。
 - **胜负**：任一怪物贴图左边缘越过 `x = 0` → 判负；最后一波的怪全部跌破自己的 `threshold` → 判胜。右下角进度条从第一波起显示，按大波在本关的位置摆放评级图标（`CFG.meter.ranks`，从最后一波往前数，数量不够就停在最后一档），图标越过之后从压在条底抬到条上沿；SYNC 光标跟着按 `meter.anim` 平滑后的进度走。
 
 ## 改数值 / 加内容
 
-1. 加一只怪：把贴图命名为 `images/enemies/enm_<key>.png`，在 `INFO.monsters` 里补一条（`id`、`name`、`level / weight / tier`、`hp`、`threshold`、`atkInterval / atkDamage`、`speedMin/Max`、`flip`、`img`、`scale`、`hitbox`），再把 key 加进关卡的 `spawnTable`。
+1. 加一只怪：把贴图命名为 `images/enemies/enm_<key>.png`，在 `INFO.monsters` 里补一条（`id`、`name`、`level / weight / tier`、`hp`、`threshold`、`atkInterval / atkDamage`、`speedMin/Max`、`flip`、`img`、`scale`、`hitbox`），再把 key 加进关卡的 `spawnTable`。`level` 是**正整数**：出怪表里必须至少有一只 `level: 1` 的怪，也不许出现 `level: 0`（两条都是硬约束，见下方约定）。
 2. 加一张卡：贴图 `images/cards/card_<key>.png` + `images/partners/ptn_<key>.png`，在 `INFO.cards` 里按 **id 升序**插入（文件顺序就是卡槽顺序和 `1`~`6` 按键映射，运行时不重排）。
 3. 加一关：`INFO.tracklist` 里补一条（上面那九项都写全），贴图放 `images/backgrounds/`、音乐放 `sounds/`；主菜单的两枚关卡按钮是 `scenes/menu.js` 里按 key 写死的，要加第三关得在那里补。
 4. 全局参数（判定距离、影子、减速倍率、特效、波次档位与大波倍率 `CFG.wave`、相机平移量 `deck.cam`、阵容展示间距 `deck.showGap` 等）都在 [game.js](game.js) 顶部的 `CFG`。
 
 > 约定：**没被点名的数值也显式写进 `info`**，不留给代码兜底 —— 布尔与常量类字段（`immune` / `flip` / `shots` / 子弹的 `slow` / 关卡的 `bgm` / `startMilk` / 怪物的 `hp` / `threshold` / `atkInterval` / `atkDamage`）一律写出来。例外是"能力开关"类字段（`produce` / `place` / `effect` / `burst` / `boom` / `charge` / `wake` / `life` / `bullet` / `atkMin` / `atkMax` / `bulletSpeed`）：代码拿"有没有这个键"当开关，所以没有该能力的卡**必须整个不写**，填 `0` 或空对象会空跑或抛错。
+
+> 出怪表的 `level` 约定（**由数据保证，代码不做兜底分支**）：每关的 `spawnTable` 里至少要有一只 `level: 1` 的怪，且任何怪都不许写 `level: 0`。预算已向上取整成整数，有 1 级怪就保证"总级别严格等于出怪量"必然达成。两条各自破坏后的表现：1 级怪缺席时，剩余额度一旦小于表里最小的 `level`，过滤出来的可选表就是空的，`pickMonster` 抽不到东西、紧接着读 `INFO.monsters[undefined].level` **抛错**（本波直接崩，不会静默少刷）；写 `level: 0` 则永远"装得下"，会被反复抽中而总级别不涨，一波刷出成百上千只、游戏卡死。
 
 > 注意：存档里记录的是 `CARDS` 数组下标。在中间插入新卡会让旧存档静默地指向别的伙伴，按项目约定旧存档直接丢弃，不做迁移。
 

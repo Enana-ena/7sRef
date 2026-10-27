@@ -90,7 +90,12 @@ function burstDamage(p) {
     if (bx.x + bx.w / 2 < x0 || bx.x - bx.w / 2 > x1) continue;
     const fy = bx.y + bx.h / 2;
     if (fy < y0 || fy > y1) continue;
-    m.hp -= b.damage;
+    const nd = state.drops.length;
+    hurtArea(m, b.damage);
+    if (m.hp <= 0) {
+      m.noCorpse = true;
+      state.drops.length = nd;
+    }
   }
 }
 
@@ -109,9 +114,14 @@ function emergeRatio(p) {
   return smooth((p.armT - info.charge) / info.wake);
 }
 
-function drawEmerge(img, s, x, feetY, k) {
+function drawEmerge(img, s, x, feetY, k, flashKey) {
   const v = (1 + k) / 2;
   ctx.drawImage(img, 0, 0, img.width, img.height * v, x - s.w / 2, feetY - s.h * v, s.w, s.h * v);
+  if (!flashKey) return;
+  const f = flashSprite(flashKey, s);
+  ctx.globalAlpha = CFG.monster.hitAlpha;
+  ctx.drawImage(f, 0, 0, f.width, f.height * v, x - s.w / 2, feetY - s.h * v, s.w, s.h * v);
+  ctx.globalAlpha = 1;
 }
 
 function boomDamage(p) {
@@ -128,7 +138,12 @@ function boomDamage(p) {
     if (bx.x + bx.w / 2 < x0 || bx.x - bx.w / 2 > x1) continue;
     const fy = bx.y + bx.h / 2;
     if (fy < y0 || fy > y1) continue;
-    m.hp -= b.damage;
+    const nd = state.drops.length;
+    hurtArea(m, b.damage);
+    if (m.hp <= 0) {
+      m.noCorpse = true;
+      state.drops.length = nd;
+    }
   }
 }
 
@@ -185,6 +200,73 @@ function monThreshold(m) {
   return mi.threshold ?? Math.floor(mi.hp / 3);
 }
 
+function initArmor(m) {
+  const mi = INFO.monsters[m.type];
+  m.a1hp = mi.armor1 ? INFO.armors[mi.armor1].hp : null;
+  m.a2hp = mi.armor2 ? INFO.armors[mi.armor2].hp : null;
+}
+
+function feetLine(row) {
+  return cellCenter(row, 0).y + CFG.monster.feet;
+}
+
+function armorDrop(m, key) {
+  if (!key) return;
+  const a = INFO.armors[key];
+  const s = plantSize(imgs['arm_' + key], a.scale);
+  const fy = feetLine(m.row);
+  state.drops.push({ key, x: m.x + a.dx, y: fy + a.dy, target: fy - s.h / 2, t: 0 });
+}
+
+function makeCorpse(m) {
+  return { type: m.type, x: m.x, row: m.row, t: 0, sf: m.slow > 0 ? CFG.monster.slow : 1 };
+}
+
+function hurtBody(m, dmg) {
+  const hf = CFG.monster.hitFlash;
+  m.hitT = hf;
+  if (m.a1hp) {
+    m.a1t = hf;
+    const over = dmg - m.a1hp;
+    m.a1hp = over > 0 ? 0 : m.a1hp - dmg;
+    if (!m.a1hp) armorDrop(m, INFO.monsters[m.type].armor1);
+    if (over > 0) m.hp -= over;
+    return;
+  }
+  m.hp -= dmg;
+}
+
+function hurtArea(m, dmg) {
+  const hf = CFG.monster.hitFlash;
+  m.hitT = hf;
+  if (m.a2hp) {
+    m.a2t = hf;
+    m.a2hp = Math.max(0, m.a2hp - dmg);
+    if (!m.a2hp) armorDrop(m, INFO.monsters[m.type].armor2);
+  }
+  hurtBody(m, dmg);
+}
+
+function monWaveHp(m) {
+  const w = CFG.wave;
+  return m.hp + (m.a1hp || 0) * w.armor1Weight + (m.a2hp || 0) * w.armor2Weight;
+}
+
+function bodyHit(m, b) {
+  return m.row === b.row && Math.abs(b.x - m.x) <= CFG.hitDist;
+}
+
+function armor2Hit(m, b) {
+  if (!m.a2hp) return false;
+  const a = INFO.armors[INFO.monsters[m.type].armor2];
+  return m.row === b.row && Math.abs(b.x - (m.x + a.dx)) <= CFG.hitDist * a.hitbox;
+}
+
+function bulletHitKind(m, b) {
+  if (armor2Hit(m, b)) return 2;
+  return bodyHit(m, b) ? 1 : 0;
+}
+
 function spawnMonster(row, key, wave) {
   for (let i = 0; i < CFG.rows; i++) {
     if (i === row) {
@@ -196,7 +278,8 @@ function spawnMonster(row, key, wave) {
     }
   }
   const mi = INFO.monsters[key];
-  const m = { row, x: CFG.W + 60, hp: mi.hp, bleedT: 0, type: key, wave, speed: randRange(mi.speedMin, mi.speedMax) };
+  const m = { row, x: CFG.W + 60, hp: mi.hp, bleedT: 0, hitT: 0, a1t: 0, a2t: 0, type: key, wave, speed: randRange(mi.speedMin, mi.speedMax) };
+  initArmor(m);
   state.monsters.push(m);
   return m;
 }
@@ -254,13 +337,14 @@ function spawnWave() {
   const unit = Math.min(Math.ceil(state.wave / CFG.wave.div), CFG.wave.cap);
   let budget = unit * lv.spawnMul;
   if (isBigWave(state.wave)) budget *= CFG.wave.bigMul;
+  budget = Math.ceil(budget);
   let sum = 0;
   state.waveHp = 0;
   while (sum < budget) {
-    const key = pickMonster(lv.spawnTable);
+    const key = pickMonster(lv.spawnTable.filter(k => INFO.monsters[k].level <= budget - sum));
     const m = spawnMonster(pickRow(), key, state.wave);
     sum += INFO.monsters[key].level;
-    state.waveHp += m.hp;
+    state.waveHp += monWaveHp(m);
   }
   if (state.wave === lv.waves) showBanner('最后攻势', CFG.banner.lastHold);
 }
@@ -276,7 +360,7 @@ function waveCutCheck() {
     return;
   }
   let hp = 0;
-  for (const m of state.monsters) if (m.wave === state.wave) hp += m.hp;
+  for (const m of state.monsters) if (m.wave === state.wave) hp += monWaveHp(m);
   if (hp < state.waveHp * CFG.wave.hpCut) cutWaveGap(CFG.wave.cutGap);
 }
 
@@ -361,6 +445,8 @@ function hasRunRecord(s) {
 function resetRun() {
   state.plants = [];
   state.monsters = [];
+  state.deaths = [];
+  state.drops = [];
   state.bullets = [];
   state.milks = [];
   state.effects = [];
@@ -481,11 +567,13 @@ function buildLineup() {
   }
   return types.map((k, i) => {
     const c = cells[i];
-    return {
+    const m = {
       type: k,
       x: bx0 + (c % nc + 0.5) * cellW + randRange(-jx, jx),
       row: (Math.floor(c / nc) + 0.5) * cellR + randRange(-jy / g.ch, jy / g.ch),
     };
+    initArmor(m);
+    return m;
   });
 }
 
@@ -666,6 +754,67 @@ function drawPickRing(r) {
   ctx.lineWidth = 1;
 }
 
+function drawMenuBtn(active) {
+  const r = uiRects().menuBtn;
+  drawButton(r, '菜单');
+  if (!active) {
+    ctx.fillStyle = CFG.cardFace.gray;
+    roundRect(r.x, r.y, r.w, r.h, 16);
+    ctx.fill();
+  }
+}
+
+function drawMenuPanel(ui) {
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(0, 0, CFG.W, CFG.H);
+  ctx.fillStyle = 'rgba(70,50,25,0.95)';
+  roundRect(ui.panel.x, ui.panel.y, ui.panel.w, ui.panel.h, 24);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 48px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('选项设置', ui.panel.x + ui.panel.w / 2, ui.panel.y + 70);
+  for (let i = 0; i < OPTS.length; i++) {
+    const r = ui.optRow(i);
+    const on = state.opts[OPTS[i].key];
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(r.x, r.y + 10, 40, 40);
+    if (on) {
+      ctx.beginPath();
+      ctx.moveTo(r.x + 8, r.y + 30);
+      ctx.lineTo(r.x + 17, r.y + 40);
+      ctx.lineTo(r.x + 32, r.y + 20);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 36px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(OPTS[i].label, r.x + 56, r.y + 30);
+  }
+  drawButton(ui.menuBtn, '菜单');
+  ctx.lineWidth = 1;
+  drawButton(ui.quitBtn, '退出');
+  drawButton(ui.restartBtn, '重新开始');
+  drawButton(ui.resumeBtn, '继续游戏');
+}
+
+function drawConfirmPanel(ui) {
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(0, 0, CFG.W, CFG.H);
+  drawPanel(ui.confirmPanel);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 40px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('你确定要重新开始这个游戏吗？', ui.confirmPanel.x + ui.confirmPanel.w / 2, ui.confirmPanel.y + 80);
+  drawButton(ui.confirmYes, '确定');
+  drawButton(ui.confirmNo, '返回');
+}
+
 function renderDeck() {
   const camX = state.camX;
   drawFieldBg(camX);
@@ -685,6 +834,7 @@ function renderDeck() {
   drawTopHud(state.deckPhase === 'pick');
 
   const picking = state.deckPhase === 'pick';
+  drawMenuBtn(picking);
   const off = deckRise();
   ctx.save();
   ctx.translate(0, off);
@@ -714,11 +864,18 @@ function renderDeck() {
   }
   ctx.restore();
   drawFlights();
+  const ru = uiRects();
+  if (state.menuOpen) drawMenuPanel(ru);
+  if (state.confirmRestart) drawConfirmPanel(ru);
 }
 
 function deckClick(p) {
   if (state.deckPhase !== 'pick') return;
   const ui = deckRects();
+  if (inRect(p, uiRects().menuBtn)) {
+    setMenu(true);
+    return;
+  }
   const q = { x: p.x, y: p.y - deckRise() };
   if (deckFull() && inRect(q, ui.start)) {
     confirmDeck();
@@ -745,7 +902,8 @@ function deckHover() {
   if (state.deckPhase === 'pick') {
     const m = { x: state.mouse.x, y: state.mouse.y - deckRise() };
     const at = poolCard(ui, m);
-    ptr = (deckFull() && inRect(m, ui.start)) ||
+    ptr = inRect(state.mouse, uiRects().menuBtn) ||
+      (deckFull() && inRect(m, ui.start)) ||
       state.deck.some((ci, i) => ci !== null && !flying(ci) && inRect(state.mouse, ui.slots(i))) ||
       (at >= 0 && !state.deck.includes(at));
   }
@@ -783,7 +941,7 @@ function effectSize(img, scale) {
   return { w, h: w * img.height / img.width };
 }
 
-function drawPartner(x, y, alpha, img, scale, flip) {
+function drawPartner(x, y, alpha, img, scale, flip, flashKey) {
   const s = plantSize(img, scale);
   ctx.globalAlpha = alpha;
   if (flip) {
@@ -791,9 +949,17 @@ function drawPartner(x, y, alpha, img, scale, flip) {
     ctx.translate(x, y);
     ctx.scale(-1, 1);
     ctx.drawImage(img, -s.w / 2, -s.h / 2, s.w, s.h);
+    if (flashKey) {
+      ctx.globalAlpha = alpha * CFG.monster.hitAlpha;
+      ctx.drawImage(flashSprite(flashKey, s), -s.w / 2, -s.h / 2, s.w, s.h);
+    }
     ctx.restore();
   } else {
     ctx.drawImage(img, x - s.w / 2, y - s.h / 2, s.w, s.h);
+    if (flashKey) {
+      ctx.globalAlpha = alpha * CFG.monster.hitAlpha;
+      ctx.drawImage(flashSprite(flashKey, s), x - s.w / 2, y - s.h / 2, s.w, s.h);
+    }
   }
   ctx.globalAlpha = 1;
 }
@@ -839,15 +1005,103 @@ function slowSprite(key) {
   return c;
 }
 
+const armorImgs = {};
+
+function armorSprite(key) {
+  if (armorImgs[key]) return armorImgs[key];
+  const img = imgs['arm_' + key];
+  const s = plantSize(img, INFO.armors[key].scale);
+  const c = document.createElement('canvas');
+  c.width = Math.ceil(s.w);
+  c.height = Math.ceil(s.h);
+  const g = c.getContext('2d');
+  g.drawImage(img, 0, 0, c.width, c.height);
+  g.globalCompositeOperation = 'source-atop';
+  g.globalAlpha = CFG.monster.slowAlpha;
+  g.fillStyle = CFG.monster.slowColor;
+  g.fillRect(0, 0, c.width, c.height);
+  armorImgs[key] = c;
+  return c;
+}
+
+const flashImgs = {};
+
+function flashSprite(key, s) {
+  if (flashImgs[key]) return flashImgs[key];
+  const c = document.createElement('canvas');
+  c.width = Math.ceil(s.w);
+  c.height = Math.ceil(s.h);
+  const g = c.getContext('2d');
+  g.drawImage(imgs[key], 0, 0, c.width, c.height);
+  g.globalCompositeOperation = 'source-in';
+  g.fillStyle = CFG.monster.hitColor;
+  g.fillRect(0, 0, c.width, c.height);
+  flashImgs[key] = c;
+  return c;
+}
+
+function drawArmor(m, key, hp, tint, flash) {
+  if (!key || !hp) return;
+  const a = INFO.armors[key];
+  const b = monsterBox(m);
+  const s = plantSize(imgs['arm_' + key], a.scale);
+  const cx = b.x + a.dx;
+  const cy = b.y + b.h / 2 + a.dy;
+  ctx.drawImage(tint ? armorSprite(key) : imgs['arm_' + key], cx - s.w / 2, cy - s.h / 2, s.w, s.h);
+  if (flash) {
+    ctx.globalAlpha = CFG.monster.hitAlpha;
+    ctx.drawImage(flashSprite('arm_' + key, s), cx - s.w / 2, cy - s.h / 2, s.w, s.h);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawArmors(m) {
+  const mi = INFO.monsters[m.type];
+  drawArmor(m, mi.armor1, m.a1hp, m.slow > 0, m.a1t > 0);
+  drawArmor(m, mi.armor2, m.a2hp, false, m.a2t > 0);
+}
+
 function drawMonster(m) {
   const b = monsterBox(m);
   const bite = 0.3;
   const k = m.eat && m.biteT > bite ? (m.biteT - bite) / 0.3 : 0;
   ctx.save();
   ctx.translate(b.x - 8 * k, b.y + b.h / 2);
-  ctx.scale((1 + 0.15 * k) * (INFO.monsters[m.type].flip ? -1 : 1), 1 - 0.12 * k);
+  ctx.scale(1 + 0.15 * k, 1 - 0.12 * k);
   ctx.drawImage(m.slow > 0 ? slowSprite(m.type) : imgs['enm_' + m.type], -b.w / 2, -b.h, b.w, b.h);
+  if (m.hitT > 0) {
+    ctx.globalAlpha = CFG.monster.hitAlpha;
+    ctx.drawImage(flashSprite('enm_' + m.type, b), -b.w / 2, -b.h, b.w, b.h);
+    ctx.globalAlpha = 1;
+  }
   ctx.restore();
+  drawArmors(m);
+}
+
+function drawCorpse(c) {
+  const d = CFG.monster.death;
+  const u = Math.min(1, c.t / d.fall);
+  const k = u * u;
+  const s = plantSize(imgs['enm_' + c.type], INFO.monsters[c.type].scale);
+  let a = 1;
+  if (c.t >= d.fall + d.hold) a = Math.max(0, 1 - (c.t - d.fall - d.hold) / d.fade);
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.translate(c.x - s.w / 2 - d.slide * k, feetLine(c.row));
+  ctx.rotate(-k * d.angle * Math.PI / 180);
+  ctx.drawImage(imgs['enm_' + c.type], 0, -s.h, s.w, s.h);
+  ctx.restore();
+}
+
+function drawDrop(f) {
+  const d = CFG.armor.death;
+  const s = plantSize(imgs['arm_' + f.key], INFO.armors[f.key].scale);
+  const u = Math.min(1, f.t / d.fall);
+  let a = 1;
+  if (f.t >= d.fall + d.hold) a = Math.max(0, 1 - (f.t - d.fall - d.hold) / d.fade);
+  ctx.globalAlpha = a;
+  ctx.drawImage(imgs['arm_' + f.key], f.x - s.w / 2, f.y + (f.target - f.y) * u * u - s.h / 2, s.w, s.h);
+  ctx.globalAlpha = 1;
 }
 
 function drawFieldBg(camX) {
@@ -1078,11 +1332,15 @@ function render() {
       ctx.drawImage(pi, c.x - ps.w / 2, cy - ps.h / 2, ps.w, ps.h);
       ctx.restore();
     }
-    if (card.info.charge) drawEmerge(img, s, c.x, feetY, emergeRatio(p));
-    else drawPartner(c.x, cy, 1, img, card.info.scale, card.info.flip);
+    const fk = p.hitT > 0 ? 'ptn_' + card.key : null;
+    if (card.info.charge) drawEmerge(img, s, c.x, feetY, emergeRatio(p), fk);
+    else drawPartner(c.x, cy, 1, img, card.info.scale, card.info.flip, fk);
   }
 
   for (const m of state.monsters) drawMonster(m);
+
+  for (const f of state.drops) drawDrop(f);
+  for (const c of state.deaths) drawCorpse(c);
 
   for (const b of state.gmilks) {
     const r = gmilkRect(b);
@@ -1153,7 +1411,7 @@ function render() {
 
   const ui = uiRects();
   drawButton(ui.spawnBtn, '出怪');
-  drawButton(ui.menuBtn, '菜单');
+  drawMenuBtn(!state.deckPhase);
 
   if (!state.deckPhase) {
     const ln = CFG.levelName;
@@ -1199,56 +1457,9 @@ function render() {
     if (mark) drawBannerText(mark, 1);
   }
 
-  if (state.menuOpen) {
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(0, 0, CFG.W, CFG.H);
-    ctx.fillStyle = 'rgba(70,50,25,0.95)';
-    roundRect(ui.panel.x, ui.panel.y, ui.panel.w, ui.panel.h, 24);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-    ctx.stroke();
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 48px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('选项设置', ui.panel.x + ui.panel.w / 2, ui.panel.y + 70);
-    for (let i = 0; i < OPTS.length; i++) {
-      const r = ui.optRow(i);
-      const on = state.opts[OPTS[i].key];
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(r.x, r.y + 10, 40, 40);
-      if (on) {
-        ctx.beginPath();
-        ctx.moveTo(r.x + 8, r.y + 30);
-        ctx.lineTo(r.x + 17, r.y + 40);
-        ctx.lineTo(r.x + 32, r.y + 20);
-        ctx.stroke();
-      }
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 36px sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(OPTS[i].label, r.x + 56, r.y + 30);
-    }
-    drawButton(ui.menuBtn, '菜单');
-    ctx.lineWidth = 1;
-    drawButton(ui.quitBtn, '退出');
-    drawButton(ui.restartBtn, '重新开始');
-    drawButton(ui.resumeBtn, '继续游戏');
-  }
+  if (state.menuOpen) drawMenuPanel(ui);
 
-  if (state.confirmRestart) {
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(0, 0, CFG.W, CFG.H);
-    drawPanel(ui.confirmPanel);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 40px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('你确定要重新开始这个游戏吗？', ui.confirmPanel.x + ui.confirmPanel.w / 2, ui.confirmPanel.y + 80);
-    drawButton(ui.confirmYes, '确定');
-    drawButton(ui.confirmNo, '返回');
-  }
+  if (state.confirmRestart) drawConfirmPanel(ui);
 
   if (state.resumeAsk) {
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -1284,7 +1495,7 @@ function render() {
 }
 
 function testHover() {
-  if (state.deckPhase) {
+  if (state.deckPhase && !state.menuOpen) {
     deckHover();
     return;
   }
@@ -1300,7 +1511,7 @@ function testHover() {
 function testClick(p) {
   const ui = uiRects();
   if (state.loading) return;
-  if (state.deckPhase) {
+  if (state.deckPhase && !state.menuOpen) {
     deckClick(p);
     return;
   }
@@ -1417,7 +1628,7 @@ function testClick(p) {
         state.milkShown = state.milk;
       }
     }
-    state.plants.push({ row: cell.row, col: cell.col, card: state.deck[state.selected], atkT: info.bullet ? randAtk(info) : 0, prodT: info.produce ? randRange(info.produce.firstMin, info.produce.firstMax) : 0, lifeT: info.life || 0, placeT: 0, armT: 0, hp: info.hp });
+    state.plants.push({ row: cell.row, col: cell.col, card: state.deck[state.selected], atkT: info.bullet ? randAtk(info) : 0, prodT: info.produce ? randRange(info.produce.firstMin, info.produce.firstMax) : 0, lifeT: info.life || 0, placeT: 0, armT: 0, hitT: 0, hp: info.hp });
     if (!state.opts.noCool) state.cool[state.selected] = INFO.cdTiers[info.cd];
     state.selected = null;
   }
@@ -1518,6 +1729,9 @@ function updateGame(raw) {
   const g = CFG.grid;
   for (const m of state.monsters) {
     if (m.slow > 0) m.slow = Math.max(0, m.slow - dt);
+    if (m.hitT) m.hitT = Math.max(0, m.hitT - dt);
+    if (m.a1t) m.a1t = Math.max(0, m.a1t - dt);
+    if (m.a2t) m.a2t = Math.max(0, m.a2t - dt);
     const sf = m.slow > 0 ? CFG.monster.slow : 1;
     const col = Math.floor((m.x - g.x) / g.cw);
     if (m.hp < monThreshold(m)) {
@@ -1532,7 +1746,10 @@ function updateGame(raw) {
         m.biteT = 0.6;
       }
       m.biteT -= dt;
-      if (m.biteT <= 0) m.biteT += 0.6;
+      if (m.biteT <= 0) {
+        m.biteT += 0.6;
+        m.eat.hitT = CFG.monster.hitFlash;
+      }
     } else {
       m.eatT = undefined;
       if (!m.frozen) m.x -= m.speed * sf * dt;
@@ -1548,6 +1765,7 @@ function updateGame(raw) {
     }
   }
   state.plants = state.plants.filter(p => p.hp > 0);
+  for (const p of state.plants) if (p.hitT) p.hitT = Math.max(0, p.hitT - dt);
   state.cool = state.cool.map(c => Math.max(0, c - dt));
 
   for (const p of state.plants) {
@@ -1613,10 +1831,21 @@ function updateGame(raw) {
   for (const b of state.bullets) b.x += b.speed * CFG.grid.cw * dt;
   for (let i = state.bullets.length - 1; i >= 0; i--) {
     const b = state.bullets[i];
-    const hit = state.monsters.find(m => m.row === b.row && Math.abs(b.x - m.x) <= CFG.hitDist);
+    let hit = null;
+    let kind = 0;
+    for (const m of state.monsters) {
+      kind = bulletHitKind(m, b);
+      if (kind) { hit = m; break; }
+    }
     if (hit) {
-      hit.hp -= b.dmg;
-      if (b.slow) hit.slow = Math.max(hit.slow || 0, b.slow);
+      if (kind === 2) {
+        hit.a2t = CFG.monster.hitFlash;
+        hit.a2hp = Math.max(0, hit.a2hp - b.dmg);
+        if (!hit.a2hp) armorDrop(hit, INFO.monsters[hit.type].armor2);
+      } else {
+        hurtBody(hit, b.dmg);
+        if (b.slow) hit.slow = Math.max(hit.slow || 0, b.slow);
+      }
       state.bullets.splice(i, 1);
     } else if (b.x > CFG.W + 60) {
       state.bullets.splice(i, 1);
@@ -1632,7 +1861,23 @@ function updateGame(raw) {
       }
     }
   }
-  state.monsters = state.monsters.filter(m => m.x > -60 && m.hp > 0);
+  const alive = [];
+  for (const m of state.monsters) {
+    if (m.hp <= 0) {
+      if (!m.noCorpse) state.deaths.push(makeCorpse(m));
+      continue;
+    }
+    if (m.x <= -60) continue;
+    alive.push(m);
+  }
+  state.monsters = alive;
+
+  const dd = CFG.monster.death;
+  for (const c of state.deaths) c.t += dt * c.sf;
+  state.deaths = state.deaths.filter(c => c.t < dd.fall + dd.hold + dd.fade);
+  const ad = CFG.armor.death;
+  for (const f of state.drops) f.t += dt;
+  state.drops = state.drops.filter(f => f.t < ad.fall + ad.hold + ad.fade);
 
   for (let i = state.gmilks.length - 1; i >= 0; i--) {
     const b = state.gmilks[i];

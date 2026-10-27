@@ -1,5 +1,112 @@
 # 更新日志
 
+## v0.1.63（2026-10-27）
+- 按你「把项目做成 github 的 pages，把 pages 的连接放入 README.md」——项目本来就是纯静态（`index.html` + 5 个 `<script>`，全部资源路径是相对路径，没有 `fetch`/后端），所以 Pages 用 **Deploy from a branch → `main` / (root)** 直接发即可，无需构建、无需 workflow 文件
+- **仓库必须公开**：免费方案下 Pages 不能从私有仓库发布，所以 `Enana-ena/7sRef` 从私有改回公开（这一步只能本人在网页 Settings → General → Danger Zone 做，我没有 gh CLI、也不碰 token）。代价已经确认过：`images/` ≈13 MB 立绘、`sounds/` ≈14 MB（`lawnbgm(1).mp3` / `World's end BLACKBOX.mp3` / `躯樹の墓守.mp3`，其中后两首是第三方曲目）连同 `00_MASTER_PROMPT.md`、`update.md` 和全部提交历史一起变成可直接下载
+- 新增根目录空文件 `.nojekyll`：留着它 Pages 才把仓库文件原样当静态资源发；删掉则走 Jekyll 构建，`sounds/World's end BLACKBOX.mp3`（空格 + 括号 + 撇号）、`images/cards/card_らん.png`（日文）、`sounds/躯樹の墓守.mp3` 这些文件名会被跳过或转义成 404。当前文件名的体检结果：没有 `_` / `.` 开头的 basename，所以 Jekyll 的下划线忽略规则这一次没踩到，但带空格/非 ASCII 的那批仍需要 `.nojekyll`
+- **README**：新增「在线游玩」小节（放在「运行」之前），写死 `https://enana-ena.github.io/7sRef/`、说明来源分支与"推 `main` 就自动重新发布"，以及 `.nojekyll` 为什么不能删；「运行」补一句 Pages 与本地双击等效（存档各浏览器独立）；目录结构里补 `.nojekyll` 一行
+- 这次 push 一并上线了并行会话 v0.1.56–v0.1.62 的工作区改动（`scenes/test.js` 出怪预算与取整、`game.js` 的 `CFG.wave.bigMul`、`info/info.js` 删 `flip`、`enm_chunipenguin.png` 镜像重绘、11 张 `difficulty-*` / `byd,etr,ftr,prs,pst` 图标、`躯樹の墓守.mp3`），所以线上就是当前最新版本；上线后 test2 的 BGM 才有文件可取（`info/info.js` 引用 `sounds/躯樹の墓守.mp3`，之前这个文件没进仓库 ⇒ 开启自然出怪时第二关听不到音乐）
+- 验证：5 个 js 文件（`game.js` / `save.js` / `info/info.js` / `scenes/menu.js` / `scenes/test.js`）过 `vm.Script`；发布前扫描改动文本无 token/私钥等凭据；打开前 `https://github.com/Enana-ena/7sRef` 与 `https://enana-ena.github.io/7sRef/` 都是 404（私有 + 未发布），改公开并启用后应为 200
+- 未改：`update_7sRef.md`（面向玩家的内容日志，Pages 属于部署设施、不是玩法内容）
+
+## v0.1.62（2026-10-27）
+- 按你「直接翻转原文件，将 flip 字样去除」——上一条 v0.1.61 的倒地动画里 `flip` 没生效（`makeCorpse` 只拷 `type/x/row/t/sf`，`drawCorpse` 是裸 `drawImage`，从不镜像），你选的解法不是给尸体补镜像，而是**把镜像烘进贴图、彻底删掉这个字段**
+- **贴图**：`images/enemies/enm_chunipenguin.png` 用 PIL `FLIP_LEFT_RIGHT` 水平镜像后原地覆盖（734×1102、RGBA、alpha 完整保留，字节 `260494 → 260732`，尺寸与模式一字未变；核对过镜像两次等于原图）。朝向实测：改前**嘴朝右**、游戏里靠 `flip: true` 翻成朝左；改后**嘴朝左** ⇒ 场上活怪外观与之前逐像素等价，只有倒地的那只从"向后倒"变成"顺着走的方向倒下去"
+- **数据**：`INFO.monsters` 三行（101 `chunipenguin` / 102 `chunipenguin_prs` / 103 `chunipenguin_ftr`，共用这一张贴图）各删掉一行 `flip: true,`（原 info.js:156 / 175 / 194），其余字段与顺序不变、仍按 id 升序。**卡片行的 `flip` 一字未动**（info.js:21 / 33 / 46 / 62 / 74 / 95 / 112 七张卡照旧）
+- **代码**：`drawMonster` 的镜像项去掉 —— `ctx.scale((1 + 0.15 * k) * (INFO.monsters[m.type].flip ? -1 : 1), 1 - 0.12 * k)` → **`ctx.scale(1 + 0.15 * k, 1 - 0.12 * k)`**（scenes/test.js:1070）。这是全仓唯一读怪物 `flip` 的地方（grep 过 `flip`，剩下的只有 `drawPartner` 的形参和两处 `card.info.flip` 调用 :1337 / :1391，全部保留）。啃咬挤压 `0.15 / 0.12` 与 `translate(b.x - 8 * k, ...)` 不变
+- 连带：`slowSprite` / `flashSprite` 的离屏缓存都是按 key 从 `imgs['enm_' + key]` 现生成的，换贴图后自动跟着新朝向，不需要改；影子、全景展示（`state.lineup`）、防具摆位（本来就不跟 `flip`）都不受影响
+- 口径记一笔：`angle: 90`「统一向左倒、不跟 `flip`」这条不变（现在也没有 `flip` 可跟了）。另外 `flip` 属于项目约定里"布尔常量字段一律显式写进 info"的那一类，这次是按你的指令**整键删除**而不是留 `flip: false`，所以以后加怪想镜像请直接在贴图里做好朝向，代码不再提供怪物级的镜像开关（伙伴级 `drawPartner` 的 `flip` 仍然有效）
+- 未动：`README.md`；`CFG` 一字未改；伤害路由、闪白与倒地/掉落的时间轴与数值；`INFO.armors` 与 `tracklist`
+- 语法自检：五个 JS 文件 `vm.Script` 全过。**未开浏览器**，场上外观是否与原状一致由你验；要复原贴图就 `git checkout -- images/enemies/enm_chunipenguin.png`（该文件在 git 里已跟踪、本轮之前是干净的）
+
+## v0.1.61（2026-10-27）
+- 按你「受击闪白（怪物＋伙伴）与倒地死亡动画（怪物＋防具掉落）」三个特性同一条指令，一条版本号
+- **新常数**（game.js:20-21）：`CFG.monster.hitFlash: 0.05`（闪白时长，秒）、`CFG.monster.hitAlpha: 0.2`（叠白强度）、`CFG.monster.hitColor: '#ffffff'`（剪影填充色，可换）、`CFG.monster.death: { fall: 1, hold: 1, fade: 0.3, angle: 90, slide: 40 }`（倒地时长 / 倒地后停留 / 淡出 / 倒地角度（度，统一向左，不跟 `flip`）/ 前冲水平位移 px）、**新组** `CFG.armor.death: { fall: 0.15, hold: 1, fade: 0.5 }`（只管防具掉落）。怪物与伙伴**共用同一对** `hitFlash/hitAlpha`，没拆两套；缓动统一 `k = u*u`（`u = min(1, t/fall)`），不额外加缓动字段；所有时长走 `updateGame` 的 `dt`，快速模式跟着折半
+- **白剪影基础设施**（scenes/test.js:1027-1041）：`flashImgs` + `flashSprite(key, s)` —— `key` 就是现成的 `imgs` 名（`enm_<type>` / `ptn_<card>` / `arm_<key>`），离屏画布按 `s`（调用方同一套 `plantSize` 的结果）铺满原图后 `globalCompositeOperation = 'source-in'` 填 `hitColor`，与原图同尺寸才能对到同一矩形；强度只走每帧 `ctx.globalAlpha`，**没有烘进 `slowImgs` / `armorImgs` 任何一张**（那两张仍按 key 永久缓存，冻住"正在闪"就坏了）。等效于往白提亮 `dst' = dst + (255-dst)·0.2`，暗部一起抬、细节保留。总量 3 张怪 + 8 张卡 + 2 件防具
+- **实例计时器**：怪物三个各自独立的 `hitT` / `a1t`（一类）/ `a2t`（二类），在 `spawnMonster` 构造点（test.js:281）初值 0，每帧 `if (t) t = Math.max(0, t - dt)` 递减（test.js:1732-1734，**不乘 `sf`**，被减速的怪闪白时长不变）；`> 0` 就叠白，时长内 alpha 恒为 `hitAlpha`、到 0 硬切回原样不淡出，重复命中只复位时间不累加亮度
+- **谁闪**（复位收进 `hurtBody` test.js:225 / `hurtArea` test.js:239，调用点不各写一遍）：子弹命中本体 → 一类还在就本体＋一类一起闪、一类没了只本体闪；子弹被二类挡（`kind === 2`，test.js:1841-1844 这一支在调用点复位）→ **只二类闪，本体不闪**；`burst`（touchhold）/ `boom`（Guy）走 `hurtArea` → 本体＋一类＋二类，这次受到伤害的部分一起闪（实测：三件都在时 10 点范围伤 → `hitT/a1t/a2t` 全部 0.05、a1 360、a2 1090）
+- **不闪的两个入口**：垂死流血 `bleedDmg`（每 0.033s 一跳，test.js:1855-1863）仍是裸 `m.hp -= CFG.monster.bleedDmg`，**不算受击**；金牛奶 `gmilk` 整只清除、不扣血，不闪也不播倒地
+- **叠白位置**：本体在 `drawMonster`（test.js:1064-1080）的 `translate/scale` **之内**、主体贴图之后叠同一矩形 `-b.w/2, -b.h`，所以自动跟 `flip` 镜像与啃咬挤压，且蓝底减速先画、白剪影后叠 ⇒ 减速时闪成浅蓝；防具在 `drawArmor` 新增第 5 个形参 `flash`（test.js:1043-1057，原来的 `tint` 旁边），`drawArmors` 传 `m.a1t > 0` / `m.a2t > 0`
+- **伙伴闪白触发点是咬合动作，不是掉血**：`atkInterval 0.04` + `atkDamage 4` 太快，跟血量走会常驻白。所以挂在 `m.biteT` 复位那一帧（test.js:1749-1752 的 `if (m.biteT <= 0)`，正是 `k=1` 的扑咬瞬间）赋 `m.eat.hitT = hitFlash` ⇒ `immune: true` 的 touchhold、出土中的 Guy（`armPhase === 1`）**照样闪**（被啃、有咬合，只是不掉血）
+- **伙伴侧三个坑都处理了**：`state.plants` 元素新增 `hitT`（构造点 test.js:1631，初值 0，每帧递减 test.js:1768）；`drawPartner`（test.js:944-965）多收第 7 个形参 `flashKey`，镜像分支里跟着 `scale(-1,1)` 走、alpha 用 `alpha × hitAlpha`（跟手预览 test.js:1284 那一处**不传**，半透明 0.6 不算受击也不闪）；Guy 的 `charge` 走 `drawEmerge`（test.js:117-125）同样加 `flashKey`，剪影按 `emergeRatio` 的同一 `v` 裁源图上半截 ⇒ 还在土里不会整只发白。伙伴没有减速，白就是白
+- **倒地只是演出，实体当帧离场**：`state.monsters = state.monsters.filter(m => m.x > -60 && m.hp > 0)` 改成显式分流（test.js:1864-1873）—— `hp <= 0` 且没被特判的 push 进 `state.deaths`、走出左边界的照旧直接消失不播。`makeCorpse`（test.js:221）拷 `type / x / row / t: 0 / sf`（`sf = m.slow > 0 ? CFG.monster.slow : 1`），不留共享引用（实测 keys 就这五个、改原怪不影响尸体）；`c.t += dt * c.sf` ⇒ 整条时间轴一起乘同一个 `sf`，被减速的怪倒地慢一倍
+- 时间轴实测：`fall 1 → hold 1 → fade 0.3` 总 **2.3s**（`sf = 0.5` 时 **4.6s**）；采样 t=0/0.5/1/2/2.15/2.29 → 旋转 `0° / -22.5° / -90° / -90° / -90° / -90°`（`k=u²`，1 秒到底）、前冲位移 `0 / -10 / -40 / -40` px、alpha `1 / 1 / 1 / 1 / 0.5 / 0.033`，到 `t = 2.3` 移除。绘制 `translate(c.x - slide*k, feetLine(row))` → `rotate(-k*angle)` → `drawImage(贴图, 0, -s.h, s.w, s.h)`，**以脚线为轴、锚点是贴图左下角**（按你给的伪码字面实现，所以贴地的躯体落在那一帧的 x 左侧 223.2px 处，而非以 `m.x` 居中）
+- **倒地特判**：`burstDamage`（test.js:93-97）与 `boomDamage`（test.js:141-145）的循环里 `hurtArea` 之后补 `if (m.hp <= 0) { m.noCorpse = true; state.drops.length = nd; }` —— 被 touchhold / Guy 炸死的怪直接消失不播倒地，**同一次伤害里顺手归零的防具也一起回滚不播**（`nd` 是这次伤害前的 `state.drops.length`，所以更早被打穿的防具掉落不受影响）；被子弹打死、或垂死后流血致死的怪正常播
+- **防具掉落**只在自身 hp 因伤害归零那一刻 push（`armorDrop` test.js:213-220）：一类被打穿（含**恰好等量**打死那一支，判据用 `if (!m.a1hp)` 而不是 `over > 0`，否则 370 点正好打穿会不掉）、二类挡弹挡穿、范围伤害打穿二类，共三处。条目 `{ key, x: m.x + a.dx, y: feetY + a.dy, target: feetY - s.h / 2, t: 0 }`，`fall 0.15 → hold 1 → fade 0.5` 总 **1.65s**，只走 y（`u²` 加速）、**水平不动**（怪继续往前走，掉件留在原地）、不旋转、不受减速影响。落地按"底边贴脚线"：实测 `prs` 下落 **142.78px**、`ftr` **31.41px**（当前 `dy` 为 -193 / -90），落定后中心分别高出脚线 50.22 / 58.59 = 各自 `s.h/2`。掉落的防具**没有任何判定**（不挡弹、不参与范围伤害与波次血量），纯贴图
+- **状态与绘制**：`state.deaths` / `state.drops` 与 `state.monsters` 同处初始化（game.js:86-87 的 `makeRun` 字面量、test.js:448-449 的 `resetRun`）⇒ **「重新开始」与「回主菜单」都会清空**，上一局的尸体不会留下；两个数组**不进存档**（`save.js:1` 的 `SAVE_KEYS` 一字未改，读档不复活演出，也没塞进 `snapshotRun`）。绘制紧跟 `for (const m of state.monsters) drawMonster(m)` 之后，**先 `drops` 再 `deaths`**（test.js:1342-1343，尸体压在活怪之上）；倒地演出**不画防具、不画影子、不叠闪白**（影子遍历 `state.monsters`，尸体自动没有）
+- 连带效果（都是"倒地不算在场"的直接结果，选定行为）：清场与大波前"场上全空"催波（`state.monsters.length === 0`）、催波分子 `monWaveHp` 累加、子弹 `find`、`burst`/`boom` 相交、Guy 引爆的 `touching`、判负线、`resultCheck`、金牛奶 —— **全部自动跳过尸体，没有加任何排除分支**；分子里也不可能再出现负 hp。手算末波：一只 270 血的怪被子弹打死进入倒地后 `state.monsters.length` 当帧减 1 ⇒ 大波前的"全空"催波比有尸体时更早触发
+- 全景展示的假怪（`state.lineup`，只有 `type / x / row / a1hp / a2hp`）走同一个 `drawMonster`：`m.hitT` 是 `undefined`、`undefined > 0` 为假 ⇒ 天然不闪，没为它加初始化
+- 未动：`README.md`；`CFG.monster` 原有字段（`bleedGap / bleedDmg / slow / slowColor / slowAlpha / feet`）与 `slowSprite` / `armorSprite` 的染色路线；伤害数值、防具数值与摆位、波次与出怪、`immune` / `armPhase` 的免伤判定；没上 `ctx.filter = 'brightness()'`，闪白期间不改形状/位移/描边，怪物身上不加伤害数字或血条，尸体无判定，伙伴没有死亡动画
+- 语法自检：`game.js`、`scenes/test.js`、`info/info.js`、`save.js`、`scenes/menu.js` 五个文件 `vm.Script` 全过；`hurtBody/hurtArea/armorDrop/makeCorpse/feetLine/monWaveHp` 与 `drawCorpse/drawDrop` 用沙箱跑过一遍（伤害路由 6 例、掉落几何 2 例、演出时间轴 12 个采样点）。**未开浏览器**，闪白与倒地的观感由你自己验
+
+## v0.1.60（2026-10-27）
+- 按你「测试场景2的bgm改为躯樹の墓守」把 `INFO.tracklist.test2.bgm` **`sounds/World's end BLACKBOX.mp3` → `sounds/躯樹の墓守.mp3`**（info/info.js:219）
+- 文件名核对过：`sounds/躯樹の墓守.mp3` 确实存在（3272431 字节 ≈ 3.12 MB，`sounds/` 里目前就三个文件），路径写法沿用关卡字段里的 `sounds/` 前缀
+- 日文字符不会有编码问题，核对了两条：`info/info.js` 是无 BOM 的 **UTF-8**（含中文/日文，Python 解码通过），`index.html:4` 有 `<meta charset="UTF-8">` ⇒ `new Audio()` 拿到的相对路径按 UTF-8 解析，和之前带空格/括号的 `World's end BLACKBOX.mp3`、`lawnbgm(1).mp3` 走同一条换源逻辑（`levelBgm(key)` 读关卡字段，`enterRun` 里只在新旧 src 不同时赋 `bgm.src`）
+- 生效范围：进 test2 的每一局（新局从 0 秒起，`bgmAt` 是每关各自的字段）；**test1 的 `bgm` 与全局默认 `INFO.bgm` 都没动**，仍是 `lawnbgm(1).mp3`
+- 一个附带现象（机制原有行为，没改）：`bgm.currentTime = slot.bgmAt` 是按关卡存档续播的，所以若读的是 test2 中途的老存档，新歌会从旧存档那一秒接着放 —— 按项目约定旧存档直接丢弃，实际碰不到
+- `World's end BLACKBOX.mp3` 现在没有任何关卡引用了，文件仍留在 `sounds/` 里没删（要删说一声）；本轮除这一行数据外未改任何代码
+
+## v0.1.59（2026-10-27）
+- 按你「目前两种防具都需要往上调一些位置」把两件防具的 `dy` **各上移 20px**：`prs.dy -73 → -93`、`ftr.dy 30 → 10`（info/info.js:182-183，`dy` 就是防具贴图中心相对怪物贴图框中心的纵向偏移，向下为正，只影响绘制）
+- 两条都动同样的量，是为了保住上一条里"prs 贴头顶 / ftr 在手部高度"这个相对关系；要单独调某一件直接改那一行的 `dy` 就行，两件互不影响
+- 相对本体框（半高 111.6）的覆盖范围：prs 由 -123.2~-22.8 变成 **-143.2~-42.8**（现在探出贴图框上沿约 31.6px）；ftr 由 -28.6~88.6 变成 **-48.6~68.6**（底边离脚线 `CFG.monster.feet` 更远 20px）
+- 判定不受影响：二类的拦弹只看横向 `Math.abs(b.x - (m.x + dx)) <= CFG.hitDist * hitbox` 与 `row`，`dy` 完全不参与，所以上移不改变它挡弹的范围；一类按定义本来就没有判定框
+- `hp / scale / dx / hitbox` 与怪物本体判定 `hitbox: 0.90` 全部原样；test1、出怪表、伤害路由、催波权重都没动
+
+## v0.1.58（2026-10-27）
+- 按你「给怪物新增一类/二类防具属性，并新增两只带防具的怪挂到测试场景2」。**新增 `INFO.armors` 独立表**（info/info.js:181，放在 `monsters` 之后、**不带 id**，任意怪可复用）：`prs`（`hp 370`、`images/others/difficulty-Present.png`、`scale 0.54 / dx 0 / dy -73`）和 `ftr`（`hp 1100`、`difficulty-Future.png`、`scale 0.63 / dx -70 / dy 30 / hitbox 1.00`）
+- `scale` 与怪物共用 `plantSize`（高 = `CFG.grid.ch 186 × scale`）⇒ prs 100.4×121.5、ftr 117.2×125.2，正好是两张贴图的原始像素（121×100 / 125×117），也就是 1:1 摆放。`dx / dy` = 防具贴图中心相对**怪物贴图框中心**的偏移（右/下为正），初值算法：prs 头顶 `-111.6 + 50.2 - 12 ≈ -73`；ftr 伸到来弹方向（本体半宽 74.33）取 `-70`，手部高度 `+30` —— 只是摆位初值，你之后自己调
+- **`prs` 故意不写 `hitbox`**：一类按定义不增大任何判定框，代码也不读它（只有 `armor2Hit` 读 `INFO.armors[armor2].hitbox`）
+- **新增两只怪**（`monsters` 按 id 升序接在后面，`armor1 / armor2` 紧跟 `hp`，三条字段顺序一致）：`chunipenguin_prs`（id 102 / level 2 / weight 4000 / tier 1）与 `chunipenguin_ftr`（id 103 / level 4 / weight 3500 / tier 2）。除这五项外**照抄** chunipenguin，含 `hitbox: 0.90`（防具不参与本体判定）；贴图复用 `enm_chunipenguin.png`，防具是独立叠加绘制。无防具一律显式 `armor1: null` / `armor2: null`，不给代码兜底留暗值
+- `tracklist.test2.spawnTable` → `['chunipenguin', 'chunipenguin_prs', 'chunipenguin_ftr']`；**test1 未动**，`出怪` 按钮仍固定取 `spawnTable[0]`（无防具的 chunipenguin）
+- **实例血量**：防具血量每只怪各自持有，字段 `m.a1hp / m.a2hp`（无防具 `null`），由助手 `initArmor(m)`（scenes/test.js:188）从 `INFO.armors[key].hp` 拷贝；`spawnMonster`（:241）与全景展示的假怪 `buildLineup`（:532）都调用，所以选卡全景里防具照样画得出、`drawArmor` 不必判 `undefined`。归零 = 视为没有这件防具（不画、不判定、不再吸收）。`save.js:26-30` 的怪物快照是全键遍历，新字段自动进/出存档；按约定旧存档直接丢弃不迁移（真读到也不抛错，只是没防具）
+- **伤害路由收进两个助手**，本体伤害不再散写 `m.hp -=`：`hurtBody(m, dmg)`（:194）一类全额吸收、`伤害 - a1hp` 的溢出转本体、破了就当没有；`hurtArea(m, dmg)`（:204）二类与本体**同时各自全额**扣，本体那份仍先过一类。入口：子弹打本体 :1729、`burstDamage` :93、`boomDamage` :131（范围/穿透类的相交判定**没新增**，仍只看本体 `hitBox(m)`，命中本体才连带二类）
+- **二类挡弹**：子弹循环（:1718-1736）由 `find` 改成同一次扫描按 `state.monsters` 顺序取"第一个能命中任何东西的怪"（多怪同行重叠时的优先级与现状一致），`bulletHitKind` 先 `armor2Hit` 后 `bodyHit`（:214-227）。二类用 `Math.abs(b.x - (m.x + dx)) <= CFG.hitDist * a.hitbox`；**本体那行一字未改**仍是 `Math.abs(b.x - m.x) <= CFG.hitDist`。二类吃到伤害时**溢出丢弃、子弹照常消耗、`b.slow` 不生效**；纵向仍只看 `row`，走你选的 (a) 中心距方案，不做真矩形相交
+- 判定窗口实测（`hitDist 40`、ftr `dx -70 / hitbox 1.00`、怪在 x=1000）：二类吃 **890~970**、本体吃 **960~1040**，重叠的 10px 归二类。子弹向右飞先进二类窗口 ⇒ **二类活着时本体一发都吃不到**（20 伤害的弹要 55 发才磨掉 1100），这期间 `starblue` 的 `slow: 10` 也挂不上；一类活着时本体 hp 恒 270 ≥ `threshold 90` ⇒ 不进死亡/流血，看着像无敌但一直在掉防具血 —— 都是预期行为
+- **不吃防具的保持原样**：跌破 `threshold` 后的流血仍直接 `m.hp -= CFG.monster.bleedDmg`（:1743）；`monThreshold`（:183）只看本体 `hp`；金牛奶是整只怪移除、不走扣血，防具随之消失不做特殊处理；怪物啃食伙伴（:1651）与防具无关
+- **催波总 hp 两边同式**：新助手 `monWaveHp(m)` = `m.hp + (a1hp||0) × armor1Weight + (a2hp||0) × armor2Weight`，分母在 `spawnWave`（:306）累加、分子在 `waveCutCheck`（:322）实时累加，同一个函数所以 `hpCut` 门槛不会随本波带防具的比例漂移。权重是 `CFG.wave` 新增的两个常数 `armor1Weight: 1.00` / `armor2Weight: 0.20`（game.js:19），没硬编码进循环。单只贡献：无防具 270、prs **640**、ftr **490**。进度条与胜负判定不读 `waveHp`，未动
+- **绘制**（:955-989）：防具画在 `drawMonster` 的 `ctx.restore()` **之后** ⇒ 不跟 `flip` 镜像、也不跟啃咬的位移/挤压形变；一类在 `m.slow > 0` 时跟着本体染蓝，用**按 armor key 缓存**的 `armorSprite(key)`（复用 `CFG.monster.slowColor / slowAlpha`），**没有**烘进 `slowSprite(m.type)` 那张按怪物类型永久缓存的图（否则会把"防具还在不在"冻进缓存）；二类不着色；`hp <= 0` 不画；没加血条/受击闪烁；`monsterBox / hitBox / 影子` 不因防具变化
+- `game.js:272` 预加载新增 `arm_<key>` 一行（与 `enm_<key>` 同款写法；`info/info.js` 先于 `game.js` 加载，`INFO.armors` 可用）。两只新怪的 `enm_chunipenguin_prs / _ftr` 由原有那行按 key 各自多建一个 Image，指向同一张图，浏览器有缓存
+- 出怪预算体检（脚本模拟 test2 全 30 波 × 400 轮随机）：`sum === budget` 恒成立、过滤后的候选表从不为空（表内仍有 `level: 1` ⇒ v0.1.57 那条不变量没被破坏）；test1 二十波同样全通过。预算第 1~12 波 = `1,1,1,2,2,2,3,3,3,10,4,4` ⇒ level 2 从预算 ≥2（第 4 波）起出现、level 4 从预算 ≥4 起（第 10 波是大波、预算 10）；400 轮里 **81.4%** 的波至少带一只防具怪
+- 未做（按你点名的范围）：穿透弹 `pierce` 预留字段、防具血条/受击反馈、二类真矩形判定框、`README.md`、旧存档迁移、`出怪` 按钮改随机抽表、test1 出怪表
+
+## v0.1.57（2026-10-27）
+- 按你「最终计算的出怪量向上取整；保证存在级别 1 的怪物、不存在级别 0 的怪物」把上一条那个"凑不满就停"的兜底分支**删掉了**，改为由数据不变量兜住：`scenes\test.js:257` 在全部乘数算完之后加 `budget = Math.ceil(budget)`，循环体收成两行 —— `while (sum < budget) { const key = pickMonster(lv.spawnTable.filter(k => INFO.monsters[k].level <= budget - sum)); ... }`，不再有 `const rest` / `if (!ok.length) break`
+- 取整为什么必须落在**最终值**上：`bigMul 2.5` 乘奇数档位必然出小数（第 20 波 `7 × 2.5 = 17.5`），整数 `level` 永远凑不出 17.5；取整后预算恒为整数，加上"表里有 1 级怪"就能证明每波都以 `sum === budget` 结束（既不越界也不留零头），抽取因此不可能空转
+- 数据侧无需改动，现状已经满足两条不变量（脚本体检输出）：`INFO.monsters` 的 `level` 集合 = `[1]`（含 1 ✓、无 0 ✓），两关 `spawnTable` 都是 `['chunipenguin']` ⇒ 表内含 1 级怪 ✓
+- **不变量被破坏后的表现（按你的"不在代码里兜底"口径，故意不防护）**：表里没有 1 级怪时，剩余额度一旦小于表内最小 `level`，过滤出的可选表为空，`pickMonster([])` 返回 `undefined`，下一句读 `INFO.monsters[undefined].level` **抛 TypeError**、这一波直接崩（不会静默少刷）；某只怪写 `level: 0` 则永远"装得下"、被反复抽中而总级别不涨，一波刷出成百上千只并卡死。两条都写进 README 的 `> 出怪表的 level 约定`，让加怪的人自己守住
+- 数值影响：只有第 20 波（两关共有）从上一条的 17 只变回 **18** 只 —— 这是"预算 17.5 向上取整成 18"的结果，与 v0.1.51 那次"靠严格小于偶然进位到 18"不同，现在是显式规则。其余 29 波一字不变；全关自然出怪总量 test1 93 → **94**、test2 184 → **185**
+- 未改：`pickMonster` 本体、`unit = min(ceil(wave/div), cap)`、`spawnMul`、`bigMul 2.5`、间隔与催波、行加权落点、`state.waveHp` 记账、手动出怪（test.js:1414 取 `spawnTable[0]`，不经此循环）
+- 验证：`scenes\test.js` 过 `vm.Script`；逐波复算 30 波，确认只有第 20 波的预算是非整数（17.5→18）、每一波都以 `sum === budget` 结束、总量 94 / 185；另用假想表 {2,5} 实跑 3 个预算确认"无 1 级怪"确实会走到空可选表那条路
+- 文档：README 三处随之更新（波次预算一句加"最后对预算向上取整"、加一只怪的清单加 `level` 正整数约束、新增 `level` 约定段）；玩家向写入 `update_7sRef.md` 顶部新条 **2026-10-27 · 出怪量向上取整，级别 1 由数据保证**
+
+## v0.1.56（2026-10-27）
+- 按你「抽取时若加入后总级别大于出怪量则不加入、重新抽取，直到总级别严格等于出怪量」改 `scenes\test.js:259-266`：每轮先把 `lv.spawnTable` 过滤成"**级别 ≤ 剩余额度**"的子表，再在子表内用原 `pickMonster` 按 `weight` 抽；子表为空则本波停止。**没写"抽一只→丢弃→再抽"的字面重试循环**，因为字面版在"没有任何一只装得下"时会无限重抽、浏览器直接卡死；过滤后抽取的分布与"拒绝并重抽"完全等价（条件分布相同），但一定走得出来
+- **为什么必须留那个退出条件（当前数据就会撞上）**：`budget` 自 v0.1.51 起可能是**小数**（`bigMul 2.5` × 奇数档位），而怪物 `level` 全是整数 ⇒ 总级别**永远不可能严格等于** x.5。两关都有第 20 波 = `7 × 2.5 = 17.5`，照字面实现就是**一进第 20 波就死循环**。现在这一波按 **17 只**收工（剩 0.5 谁都不装得下）
+- 若你更想从源头让它总有解：把预算在数据侧变成整数（`bigMul` 改 2 或 3，或对 `budget` 取整），那样"严格等于"就是硬保证、可以删掉这条退出分支。按你以往"退化公式在数据里修、不用代码兜底"的偏好，这条留给你定，我没顺手改
+- 实测差异（现表里只有 `chunipenguin` `level: 1`）：**只有第 20 波变** 18 → **17** 只 —— 旧逻辑靠"预算带小数时向上进位"刷到 18，级别总和 18 已越过 17.5；新逻辑不越界。第 1–19、21–30 波一字不变（预算整数、级别 1 一定正好凑满）。全关自然出怪总量 test1 94 → **93**、test2 185 → **184**
+- 新增的保证：以后加 `level > 1` 的怪，本波级别总和**永不超出预算**（旧逻辑最多多出一只怪的级别）。同时提醒"严格等于"并非无条件成立——用假想表实测：表 = {2,5}、预算 12 时可能停在 `5+2+2+2 = 11`（剩 1 谁都装不下），取决于抽取顺序；**只要表里有 `level: 1` 的怪，整数预算就一定正好等于**（表 = {1,3} 在预算 5/6/7/8 全部命中）
+- 未改：`pickMonster` 本体与权重口径、`unit = min(ceil(wave/div), cap)`、`spawnMul`、大波 `bigMul`、行加权落点与 `rowInit` 播种、`state.waveHp` 记账（仍是逐只累加）、手动出怪（test.js:1414 直接取 `spawnTable[0]`，不走这个循环）
+- 遗留风险（与本次无关、v0.1.33 起提过）：某只怪若写成 `level: 0`，它永远"装得下"，`while` 仍会无限刷；现有数据没有 0 级别，我没加防护
+- 验证：`scenes\test.js` 过 `vm.Script`；逐波复算 30 波新旧只数与级别总和，差异仅第 20 波；另对 {2,5}、{1,3} 两组假想级别各跑 5 个预算，确认"不越界"恒成立、"严格等于"的成立条件如上
+- 玩家向已写入 `update_7sRef.md` 顶部新条 **2026-10-27 · 出怪抽取：装不下就换一只**
+
+## v0.1.55（2026-10-27）
+- 按你「稍增大milk的判定范围，使其更容易被点击到」把 `CFG.milk.hitPad` **40 → 55**（game.js:25，四周边各多 15px）
+- 判定框是 `milkSize()` 往外匀扩一圈 pad（scenes/test.js:172-181）：奶滴按 `CFG.milk.size = 120` 等高绘制、贴图 211×373 所以实际只有约 67.88px 宽，于是盒子由 147.88×200 变成 **177.88×230**（宽 +20.3%、高 +15%）。**真正卡住手感的是水平方向**（贴图又瘦又高），pad 是匀扩的，所以宽度也跟着吃了这份增益
+- 影响面只有两处（都读同一个 `milkAt`）：点击采集 scenes/test.js:1408 和悬停手型 scenes/test.js:1315。飞行中的奶（`k.fly`）本来就 `continue` 跳过，不参与判定；自动采集 `autoCollect` 走的是全量遍历，不读判定框，行为不变
+- 未动：奶的贴图尺寸 `size`、掉落位置、`value`、采集后的飞行弧线全部原样；想要只加宽不加高的话可以把 pad 拆成 `hitPadX / hitPadY` 两个字段，说一声即可
+
+## v0.1.54（2026-10-27）
+- 按你「在选卡时，也会显示菜单按钮，并且可以正常使用；选卡完毕点击开始后暂时被禁用（但不消失），直到关卡正式开始」—— 菜单按钮进选卡界面，状态分三档：**`'pick'` 可见可用 → `'out'`/`'count'` 可见但禁用 → `deckPhase === null`（关卡正式开始）恢复可用**
+- **显示**：新增 `drawMenuBtn(active)`（scenes/test.js:669）—— 先正常 `drawButton`，`active` 为假时再盖一层 `CFG.cardFace.gray` + `roundRect(..., 16)`，与"开始游戏"按钮在卡组没填满时的置灰写法一致（按钮不消失，只是灰）。`renderDeck` 在 `drawTopHud` 之后调用 `drawMenuBtn(picking)`（:749，画在 `ctx.translate(0, off)` 之前，所以面板下沉时它钉在右上角不动）；战斗渲染里原来的 `drawButton(ui.menuBtn, '菜单')` 换成 `drawMenuBtn(!state.deckPhase)`（:1226），于是 `'count'` 倒计时那 5 秒它已经画出来、但正是灰的
+- **可用**：`deckClick` 在 `'pick'` 分支最前面吃掉菜单按钮点击（:787-790 → `setMenu(true)`），位置排在开始/卡槽/卡池判定之前；`deckHover` 同步把手型加上（:817）。置灰阶段什么都不做：`'out'`/`'count'` 依旧走 `if (state.deckPhase !== 'pick') return;`（:785），跟"开始游戏"点下去之后的行为口径一样
+- **菜单面板要能盖在选卡界面上**：把 `render()` 里内联的选项面板与"重新开始"确认面板各抽成 `drawMenuPanel(ui)`（:679）/ `drawConfirmPanel(ui)`（:717），战斗渲染原地改成两行调用（:1272 / :1274），`renderDeck` 末尾在 `drawFlights()` 之后补上同样两行（:780-781）—— 绘制顺序、圆角、`ctx.lineWidth = 1` 的复位都原样搬，没有改任何样式或按钮位置
+- **输入分流**：`testHover`（:1310）与 `testClick`（:1326）的选卡早退改成 `if (state.deckPhase && !state.menuOpen)` —— 菜单没开时点击仍归选卡处理；菜单开着时落回原有那套通用处理（点菜单按钮关闭 / 退出 / 重新开始 / 继续游戏 / 三个选项勾选），选卡本体不吃点击
+- **BGM 不被菜单提前放出来**：`setMenu(false)` 原本无条件 `playBgm()`，选卡期间关菜单就会把音乐提前起掉；game.js:130 改为 `else if (!state.deckPhase) playBgm();`，"进关卡正式开始才放 BGM"（`updateDeck` 里 `'count'` 结束那次的 `playBgm()`，scenes/test.js:555 附近）这条时间线保持不动
+- 未动：`'in'`（视角右移进场）与 `needPick()` 为假的直接开局场景仍然不画菜单按钮 —— 你说的是"选卡时"，那两段还没有选卡界面；选项内容、存档写入、`writeRun` 时机、战斗里的按钮布局全部原样
+
 ## v0.1.53（2026-10-27）
 - 按你「`_face_guy.py` 还有用吗，没用的话删掉」删掉根目录的抠图脚本 `_face_guy.py`（4.4 KB）。判断依据都查过了：游戏代码与 `README.md` **零引用**（`grep -rn face_guy` 排除 `update.md` 后无命中），它写出的两个产物 `images/partners/ptn_Guy_face.png` 与调试叠加图 `_final_ov.png` 早就不在了（v0.1.29 那次你换掉了原图、把我并行做出来的文件删了），所以这个脚本只剩"一次性工具"的身份
 - 唯一还挂着它的地方是 v0.1.29 里那条**未接受的提议**（本文件 :209：`Guy_boom.png` 是 1024×1024 全不透明，"要抠掉底色我可以照 `_face_guy.py` 那套管子做"）。按"旧条目留作历史"的规矩那两行原文没动；真要做那张透明 `Guy_boom` 时脚本照抄即可 —— 它已经进了首个提交 `b7c9585`，`git show b7c9585:_face_guy.py > _face_guy.py` 就能取回
