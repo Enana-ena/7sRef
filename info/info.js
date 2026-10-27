@@ -158,7 +158,7 @@ const INFO = {
       hitbox: 0.90,
     },
     chunipenguin_prs: {
-      id: 102,
+      id: 103,
       name: '中二企鹅-prs',
       level: 2,
       weight: 4000,
@@ -176,14 +176,14 @@ const INFO = {
       hitbox: 0.90,
     },
     chunipenguin_ftr: {
-      id: 103,
+      id: 105,
       name: '中二企鹅-ftr',
       level: 4,
       weight: 3500,
-      tier: 2,
+      tier: 1,
       hp: 270,
-      armor1: null,
-      armor2: 'ftr',
+      armor1: 'ftr',
+      armor2: null,
       threshold: 90,
       speedMin: 27,
       speedMax: 33,
@@ -196,7 +196,7 @@ const INFO = {
   },
   armors: {
     prs: { name: 'prs', hp: 370, img: 'images/others/difficulty-Present.png', scale: 0.54, dx: 0, dy: -193 },
-    ftr: { name: 'ftr', hp: 1100, img: 'images/others/difficulty-Future.png', scale: 0.63, dx: -70, dy: -90, hitbox: 1.00 },
+    ftr: { name: 'ftr', hp: 1100, img: 'images/others/difficulty-Future.png', scale: 0.54, dx: 0, dy: -193 },
   },
   tracklist: {
     test1: {

@@ -1082,14 +1082,17 @@ function drawCorpse(c) {
   const d = CFG.monster.death;
   const u = Math.min(1, c.t / d.fall);
   const k = u * u;
-  const s = plantSize(imgs['enm_' + c.type], INFO.monsters[c.type].scale);
+  const img = imgs['enm_' + c.type];
+  const s = plantSize(img, INFO.monsters[c.type].scale);
+  const pd = CFG.artPad[INFO.monsters[c.type].img] ?? [0, 0, 0, 0];
+  const px = pd[0] * s.w / img.width, py = pd[3] * s.h / img.height;
   let a = 1;
   if (c.t >= d.fall + d.hold) a = Math.max(0, 1 - (c.t - d.fall - d.hold) / d.fade);
   ctx.save();
   ctx.globalAlpha = a;
-  ctx.translate(c.x - s.w / 2 - d.slide * k, feetLine(c.row));
+  ctx.translate(c.x - s.w / 2 + px - d.slide * k, feetLine(c.row) - py);
   ctx.rotate(-k * d.angle * Math.PI / 180);
-  ctx.drawImage(imgs['enm_' + c.type], 0, -s.h, s.w, s.h);
+  ctx.drawImage(img, -px, py - s.h, s.w, s.h);
   ctx.restore();
 }
 
@@ -1099,8 +1102,9 @@ function drawDrop(f) {
   const u = Math.min(1, f.t / d.fall);
   let a = 1;
   if (f.t >= d.fall + d.hold) a = Math.max(0, 1 - (f.t - d.fall - d.hold) / d.fade);
+  const h = f.target - f.y;
   ctx.globalAlpha = a;
-  ctx.drawImage(imgs['arm_' + f.key], f.x - s.w / 2, f.y + (f.target - f.y) * u * u - s.h / 2, s.w, s.h);
+  ctx.drawImage(imgs['arm_' + f.key], f.x + d.run * u - s.w / 2, f.y + h * (d.push * u + (1 - d.push) * u * u) - s.h / 2, s.w, s.h);
   ctx.globalAlpha = 1;
 }
 
