@@ -121,6 +121,27 @@ const INFO = {
       ptnImg: 'images/partners/ptn_ちびみるく.png',
       scale: 1.00,
     },
+    bing: {
+      id: 15,
+      name: '琪露诺',
+      hp: 300,
+      cd: 'very slow',
+      costmilk: 75,
+      immune: true,
+      ash: false,
+      flip: false,
+      life: 1,
+      ice: {
+        damage: 20,
+        freezeMin: 4,
+        freezeMax: 6,
+        slow: 20,
+        flash: { color: '#a8e6ff', alpha: 0.55, hold: 0.1, fade: 0.1 },
+      },
+      cardImg: 'images/partners/ptn_bing.png',
+      ptnImg: 'images/partners/ptn_bing.png',
+      scale: 1.00,
+    },
   },
   bullets: {
     tap: {

@@ -230,6 +230,20 @@ function boomDamage(p) {
   }
 }
 
+function applyFreeze(m, dur) {
+  m.freeze = Math.max(m.freeze || 0, m.slow > 0 ? dur * CFG.monster.freezeResist : dur);
+}
+
+function iceBlast(p) {
+  const ice = CARDS[p.card].info.ice;
+  for (const m of state.monsters) {
+    hurtArea(m, ice.damage);
+    applyFreeze(m, randRange(ice.freezeMin, ice.freezeMax));
+    m.slow = Math.max(m.slow || 0, ice.slow);
+  }
+  state.flash = { t: 0, fx: ice.flash };
+}
+
 function touching(p, m) {
   const info = CARDS[p.card].info;
   const g = CFG.grid;
@@ -682,6 +696,7 @@ function resetRun() {
   state.deaths = [];
   state.drops = [];
   state.ashes = [];
+  state.flash = null;
   state.reward = null;
   state.ceremony = null;
   state.bullets = [];
@@ -1318,8 +1333,15 @@ function drawArmor(m, key, hp, tint, flash) {
 
 function drawArmors(m) {
   const mi = INFO.monsters[m.type];
-  drawArmor(m, mi.armor1, m.a1hp, m.slow > 0, m.a1t > 0);
+  drawArmor(m, mi.armor1, m.a1hp, m.slow > 0 || m.freeze > 0, m.a1t > 0);
   drawArmor(m, mi.armor2, m.a2hp, false, m.a2t > 0);
+}
+
+function drawFreezeTrap(m) {
+  const tp = CFG.monster.freezeTrap;
+  const w = imgs['icetrap'].width * tp.scale;
+  const h = imgs['icetrap'].height * tp.scale;
+  ctx.drawImage(imgs['icetrap'], m.x - w / 2, feetLine(m.row) - h + tp.dy, w, h);
 }
 
 function drawMonster(m) {
@@ -1329,7 +1351,7 @@ function drawMonster(m) {
   ctx.save();
   ctx.translate(b.x - 8 * k, b.y + b.h / 2);
   ctx.scale(1 + 0.15 * k, 1 - 0.12 * k);
-  ctx.drawImage(m.slow > 0 ? slowSprite(m.type) : imgs['enm_' + m.type], -b.w / 2, -b.h, b.w, b.h);
+  ctx.drawImage(m.slow > 0 || m.freeze > 0 ? slowSprite(m.type) : imgs['enm_' + m.type], -b.w / 2, -b.h, b.w, b.h);
   if (m.hitT > 0) {
     ctx.globalAlpha = CFG.monster.hitAlpha;
     ctx.drawImage(flashSprite('enm_' + m.type, b), -b.w / 2, -b.h, b.w, b.h);
@@ -1337,6 +1359,7 @@ function drawMonster(m) {
   }
   ctx.restore();
   drawArmors(m);
+  if (m.freeze > 0) drawFreezeTrap(m);
 }
 
 function drawCorpse(c) {
@@ -1828,6 +1851,15 @@ function render() {
   if (state.reward) drawReward();
   if (state.ceremony) drawCeremony();
 
+  if (state.flash) {
+    const fx = state.flash.fx;
+    const k = state.flash.t < fx.hold ? 1 : Math.max(0, 1 - (state.flash.t - fx.hold) / fx.fade);
+    ctx.globalAlpha = fx.alpha * k;
+    ctx.fillStyle = fx.color;
+    ctx.fillRect(0, 0, CFG.W, CFG.H);
+    ctx.globalAlpha = 1;
+  }
+
   if (state.menuOpen) drawMenuPanel(ui);
 
   if (state.confirmRestart) drawConfirmPanel(ui);
@@ -2121,10 +2153,12 @@ function updateGame(raw) {
   const g = CFG.grid;
   for (const m of state.monsters) {
     if (m.slow > 0) m.slow = Math.max(0, m.slow - dt);
+    if (m.freeze > 0) m.freeze = Math.max(0, m.freeze - dt);
     if (m.hitT) m.hitT = Math.max(0, m.hitT - dt);
     if (m.a1t) m.a1t = Math.max(0, m.a1t - dt);
     if (m.a2t) m.a2t = Math.max(0, m.a2t - dt);
     const sf = m.slow > 0 ? CFG.monster.slow : 1;
+    const fz = m.freeze > 0;
     const col = Math.floor((m.x - g.x) / g.cw);
     if (m.hp < monThreshold(m)) {
       if (m.eat) m.frozen = true;
@@ -2137,18 +2171,21 @@ function updateGame(raw) {
         m.eatT = INFO.monsters[m.type].atkInterval / sf;
         m.biteT = 0.6;
       }
-      m.biteT -= dt;
-      if (m.biteT <= 0) {
-        m.biteT += 0.6;
-        m.eat.hitT = CFG.monster.hitFlash;
+      if (!fz) {
+        m.biteT -= dt;
+        if (m.biteT <= 0) {
+          m.biteT += 0.6;
+          m.eat.hitT = CFG.monster.hitFlash;
+        }
       }
     } else {
       m.eatT = undefined;
-      if (!m.frozen) m.x -= m.speed * sf * dt;
+      if (!m.frozen && !fz) m.x -= m.speed * sf * dt;
     }
   }
   for (const m of state.monsters) {
     if (!m.eat) continue;
+    if (m.freeze > 0) continue;
     m.eatT -= dt;
     if (m.eatT <= 0) {
       const mi = INFO.monsters[m.type];
@@ -2183,8 +2220,9 @@ function updateGame(raw) {
     if (!CARDS[p.card].info.life) continue;
     p.lifeT -= dt;
     if (p.lifeT <= 0) {
-      spawnEffect(p);
+      if (CARDS[p.card].info.effect) spawnEffect(p);
       if (CARDS[p.card].info.burst) burstDamage(p);
+      if (CARDS[p.card].info.ice) iceBlast(p);
       state.plants.splice(i, 1);
     }
   }
@@ -2199,6 +2237,10 @@ function updateGame(raw) {
   }
   for (const f of state.effects) f.t += dt;
   state.effects = state.effects.filter(f => f.t < f.grow + f.hold + f.fade);
+  if (state.flash) {
+    state.flash.t += dt;
+    if (state.flash.t >= state.flash.fx.hold + state.flash.fx.fade) state.flash = null;
+  }
   for (const b of state.banners) b.t += dt;
   state.banners = state.banners.filter(b => b.t < CFG.banner.fade * 2 + b.hold);
 
