@@ -1,5 +1,17 @@
 # 更新日志
 
+## v0.1.85（2026-10-28）
+- 按你点名的四项数值改 [info/info.js](info/info.js) 的 `tracklist.test1` 一个块（:217–:232），**只改关卡数据，一行代码没动**；`test2`、`INFO.monsters` 三条本体、`CFG` 全表（含 `CFG.belt` / `CFG.wave`）、传送带与出怪的机制代码都没碰
+- **波次** `waves: 10 → 20`（:222）。分母没有写死的地方：右下角进度条与"本波打完没"的判断都直接读 `lv.waves`（[scenes/test.js](scenes/test.js):1788、:1797、:601、:2056），所以改一个字段就全跟过去
+- **出怪倍率** `spawnMul: 1 → 3`（:224）。预算式原样未动：`budget = ceil( unit × spawnMul × (大波 ? bigMul 2.5 : 1) )`、`unit = min(ceil(波 / div 3), cap 8)`。逐波总级别预算 `1/2/3 段` → 各自 ×3：第 1~3 波 `1 → 3`、第 4~6 波 `2 → 6`、第 7~9 波 `3 → 9`、第 10 波 `10 → 30`，第 11~20 波是新增的（12 / 12 / 15 / 15 / 15 / 18 / 18 / 18 / 21 / 第 20 波 53）。`unit` 现在在第 19 波才爬到 7、第 20 波仍是 7（没顶到 `cap 8`）
+- **出怪表** `spawnTable: ['chunipenguin'] → ['chunipenguin', 'chunipenguin_prs', 'chunipenguin_ftr']`（:225），即 101 / 103 / 105 三只全入表（和 `test2` 现在同一张表）。`pickMonster`（:444）按各怪自己的 `weight`（4000 / 4000 / 3500）加权、并用 `level`（1 / 2 / 4）做"装不下的怪直接重抽"的门限：剩余额度 < 4 抽不到 ftr、< 2 只剩无防具那只。数据一个没改，只是这两只带防具的现在才进得来。**注意**：`level` 混档之后"预算 = 只数"这个巧合没了——20 波总预算 281 级，只数约 160（1×85 + 2×52 + 4×23），浮动来自抽签；改前 10 波 28 级 = 28 只、清一色无防具
+- **大波与末波**：`CFG.wave.bigEvery = 10` 未动 ⇒ 第 10、20 波是大波，而 `isBigWave` 的 `w === lv.waves` 那半条现在也落在 20 上，所以**第 20 波既是大波又是末波**（原来是第 10 波兼两者）。`bigSeed: 'chunipenguin'` 没改 ⇒ 大波额外撒的仍是无防具那只（第 10 波补 4 只、第 20 波补 `min(7, 53-3) = 7` 只）；末波"按 `spawnTable` 顺序每种各一只"从撒 1 只变撒 3 只（1 + 2 + 4 = 7 级，仍远低于 53，不会顶掉大波保底）
+- **传送带权重** `beltTable`（:231）：`{1:20 3:20 4:20 5:20 6:20 8:20}` → `{1:20 3:10 4:10 5:10 6:20 8:20}`，合计 `120 → 90`。基础出率：でらっくま / めがねっくま / ちびみるく 各 `16.7% → 22.2%`，touchhold / らん / Guy 各 `16.7% → 11.1%`。id→key 对照按 `INFO.cards[*].id` 核过：1 dxbear、3 touchhold、4 ran、5 Guy、6 meganekuma、8 chibimilk（2 是 `milk`，本来就不在带上）
+- **要提醒的连带效果**：`CFG.belt.countPenalty: [3, 4]` / `penaltyValues: [5, 1]` 是**全局的绝对值覆盖、不是乘法**，这轮没动。原来六张同权 20 时"场上攒到 3 张"是把出率砍到 1/4；现在 10 权重那三张同样一步只砍到 1/2，即**档位罚对低权重卡变轻**。想按比例罚得改 `CFG.belt` 而不是关卡表——等你指令
+- `name` / `bg` / `bgm` / `startMilk: 50` / `firstReward: null` / `showMonsters: true` / `conveyor: true` / `cardSlots: 6` / `deckSelect: false` / `beltPreset: []` 全部原样保留
+- **验证**：`info/info.js` 过 `vm.Script` 解析 OK；上面的预算分段、总级别 281、约 160 只、出率百分比，是把 `INFO` 真读进沙箱后按 `spawnWave` 的同一条式子（含 `pickMonster` 的权重与 `level` 门限）逐波跑出来的，不是手算。**未开浏览器、未 commit / push**（这轮指令没提发布）
+- **README 滞后（本轮新增 2 行，未擅自改）**：README.md:77 那句"同 id 在带上攒到 `countPenalty` 的档就把基础权重换成 `penaltyValues`（**`20 → 5 → 1`**）"举的是旧基数，现在带上有三种卡走的是 `10 → 5 → 1`；README.md:78 两处拿测试场景1 举例的话现在不成立——"`level` 大于 1 的怪越多的表…（测试场景2… **测试场景1 全是 1 级才恰好"预算 = 只数"**）"已经反了（101/103/105 全入表，就是"混了 1/2/4 级"的例子），"既是大波又是末波的那一波（**测试场景1 第 10 波**…）"应读作第 20 波。都是举例句、不影响机制描述
+
 ## v0.1.84（2026-10-28）
 - 按你「更新readme并push」把 [README.md](README.md) 回填到当前代码口径（v0.1.81–v0.1.83 三轮攒下的滞后一次清完），**只改文档，一行代码没动**；三处挂账的滞后条目此前只写在 update.md 里，现在全部落地
 - **文件与键名**：「运行」段的载入顺序 `clears.js` → `progress.js`（test.js → save.js → progress.js → game.js 的依赖说明同步），顺带补了一句"因为它早于 `game.js` 求值、顶层 `const CFG` 还在 TDZ，所以只能引用函数体内的 `CFG`"；「通关记录」整条改写成**全局记录**——单键 `apollo7s:progress`、内容 `{ cleared, slots }`、`cleared` 只认 `=== true`、`slots` 不是数字就退回 `CFG.cardSlots`、`setSlots()` 夹到 `[6, 10]`、并注明**现在没有任何玩法途径会调它**；旧键 `apollo7s:cleared` 标成已废弃、不迁移。「目录结构」里的 `clears.js` 行同样换成 `progress.js`；「已知未完成」里首通奖励那条的键名一并改到 `apollo7s:progress.cleared`
