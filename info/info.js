@@ -255,7 +255,7 @@ const INFO = {
     test2: {
       name: '测试场景2',
       bg: 'images/backgrounds/bg1.png',
-      bgm: 'sounds/躯樹の墓守.mp3',
+      bgm: 'sounds/Trick Tear.mp3',
       startMilk: 50,
       waves: 30,
       firstReward: null,

@@ -1,5 +1,15 @@
 # 更新日志
 
+## v0.1.92（2026-10-28）
+- 按你「将场景2的bgm改为 Trick Tear，然后 push」：**改一行数据 + 把素材纳入版本库**，切曲机制一个字没动
+- **改动 [info/info.js:258](info/info.js#L258)**：`bgm: 'sounds/躯樹の墓守.mp3',` → `bgm: 'sounds/Trick Tear.mp3',`（`test2` 这一关的关卡级覆盖字段）。`test1`（[info/info.js:241](info/info.js#L241)）与全局默认 `INFO.bgm`（[:269](info/info.js#L269)）仍是 `sounds/lawnbgm(1).mp3`，两关依旧不同曲
+- **⚠ 素材本来没进版本库**：`git ls-files sounds/` 之前只有 `lawnbgm(1).mp3` / `World's end BLACKBOX.mp3` / `winmusic.ogg` / `躯樹の墓守.mp3` 四份，**`sounds/Trick Tear.mp3` 是未跟踪文件** ⇒ 只改 info.js 的话，本地能响、推上去 Pages 会 404，而且症状是**安静**（`playBgm()` 里 `p.catch(() => {})` 吞掉了加载失败，不会报错也不会白屏），所以这一轮把它一起 `git add`（**3,065,799 字节**，ID3v2 头 2095 字节，MPEG-1 Layer III / **128 kbps CBR / 44.1 kHz / 联合立体声**，按音频字节数换算**时长约 191.5 秒 ≈ 3 分 11 秒**）。文件名里的空格与 v0.1.88 那次是同一类坑，靠根目录 `.nojekyll` 原样发布（README:7 已写）
+- **不需要动代码的理由**：关卡级 `bgm` 字段是现成的 ——`levelBgm(key)` = `INFO.tracklist[key].bgm ?? INFO.bgm`（[game.js:81-82](game.js#L81-L82)），换曲只发生在 `bgm` 里 `new Audio` 之外的那一处（[game.js:189-191](game.js#L189-L191)）：`const src = levelBgm(key); if (src !== bgmSrc) { bgmSrc = src; ... }` ⇒ 进关时才换 `src`、同一首反复进不重新加载；`bgm.loop = true` 不变，所以 3 分 11 秒的曲子会在整关期间循环，比场景2 的 30 波长度充裕
+- **`sounds/躯樹の墓守.mp3` 从此没有任何引用**（全仓 `grep 躯樹` 在 js/html 里已经零命中），文件按原样留在仓库里没删——与 `World's end BLACKBOX.mp3` 同一种"暂留"状态（后者在 README:44/:116 有挂账，前者没有）
+- **验证**：六个脚本 `vm.Script` 逐个 **PARSE OK × 6**；把 `INFO` 单独跑进 `vm` 上下文读回 `tracklist`，`test1 = sounds/lawnbgm(1).mp3`（存在 ✓ 已跟踪 ✓）、`test2 = sounds/Trick Tear.mp3`（存在 ✓ 已跟踪 **false** ⇒ 正是上面要补的那件事）、`INFO.bgm = sounds/lawnbgm(1).mp3`（存在 ✓）。**没开浏览器**：试听由你自己做
+- **README 滞后（未改，等你指令）**：`:44` 那行 sounds/ 清单写的是「`躯樹の墓守.mp3`（场景2）」，现在场景2 用的是 `Trick Tear.mp3`、`躯樹の墓守.mp3` 变成无关卡引用的暂留文件；`:116` 的"已无关卡引用"名单目前只列了 `World's end BLACKBOX.mp3`，严格说该再多一条
+- **已按指令 commit + push**
+
 ## v0.1.91（2026-10-28）
 - 按你「将 icetrap 的图片增大一些」：**只改一个数** —— [game.js:27](game.js#L27) 里 `CFG.monster.freezeTrap.scale` **`1.0 → 1.5`**。没有新增/重绘贴图、没有改 `drawFreezeTrap` 的公式、`dy` 保持 `0`、"一些"我按 +50% 落的
 - **落点与算法**（[scenes/test.js:1340-1345](scenes/test.js#L1340-L1345)）：`w = imgs['icetrap'].width * tp.scale`、`h = imgs['icetrap'].height * tp.scale`，图源是 66×30 RGBA ⇒ 绘制尺寸 **66×30 → 99×45**
