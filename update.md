@@ -1,5 +1,16 @@
 # 更新日志
 
+## v0.1.86（2026-10-28）
+- 按你「修改测试场景1 + push」改两处：`beltTable` 的两枚权重（[info/info.js](info/info.js):232），以及**新增一个关卡字段 `firstGap`** 把本关第一波的等待压到 1 秒（[info/info.js](info/info.js):223）；为它动了三个播种/取值点（[game.js:88](game.js#L88)、[game.js:135](game.js#L135)、[scenes/test.js:533](scenes/test.js#L533)、[scenes/test.js:703](scenes/test.js#L703)）
+- **传送带权重** `{1:20 … 8:20}` → `{1:15 3:10 4:10 5:10 6:20 8:25}`，合计**仍是 90**（一减一加刚好抵消），所以四张没点名的卡出率不变：でらっくま `22.2% → 16.7%`、ちびみるく `22.2% → 27.8%`，touchhold / らん / Guy 各 11.1%、めがねっくま 22.2% 照旧。`countPenalty: [3, 4]` / `penaltyValues: [5, 1]` 依然是绝对值覆盖，所以现在三档路径变成 `15 → 5`、`25 → 5`、`10 → 5`
+- **新增字段 `firstGap`（关卡级，单位毫秒）**：`test1` 写 `firstGap: 1000`，`test2` **不写这个键** ⇒ 走 `CFG.wave.first = 19000`，表现一字未变。取值用 `??` 退回全局，和 `bgm` / `startMilk` 是同一套约定（见 README 的关卡字段说明），不是"给旧档兜底"
+- **代码侧只加了一个函数**：[game.js:88](game.js#L88) `levelFirstGap(key)`，形状照抄紧邻的 `levelStartMilk(key)`（[game.js:84](game.js#L84)）。原来第一波的等待写死在**三处**，现在都走这个函数：① [game.js:135](game.js#L135) `makeRun(key)` 里的初始 `waveGap`（`SLOTS` 建局时）② [scenes/test.js:703](scenes/test.js#L703) `resetRun()` 里的 `state.waveGap`（新开一局 / 重新开始 / 结算后回菜单）③ [scenes/test.js:533](scenes/test.js#L533) `randWaveGap()` 的 `state.wave === 0` 分支。第 ③ 处在当前流程里其实走不到（`randWaveGap` 只在 `state.wave++` 之后被调用，[scenes/test.js:2059](scenes/test.js#L2059)），但留着不改成同一个口径就会变成"两个真相"，所以一并换掉
+- **这 1 秒从什么时候起算**：`loop` 在 `state.deckPhase` 期间只跑 `updateDeck`、**不调 `updateGame`**（[game.js:284](game.js#L284)），而 `state.clock` 只在 `updateGame` 里 `+= dt * 1000`（[scenes/test.js:2052](scenes/test.js#L2052)），所以阵容全景 + `3 / 2 / 1 / START!` 全程时钟停在 0 ⇒ 第一波是 **START! 之后 1 秒**（`state.clock - state.lastSpawn > state.waveGap` 判定，[scenes/test.js:2056](scenes/test.js#L2056)）；开快进（×2）时真实时间 0.5 秒。整条链路没引入第二套计时，也没碰 `bigGap` / `gapMin` / `gapMax`
+- **连带后果（不是 bug，先说明白）**：带子的第一张卡仍要等 `CFG.belt.interval.normal = 4` 秒，所以现在**第 1 波到达时场上必然还没有卡**（改前是 19 秒，够攒 4 张）。怪物从右边缘走到失守线要几十秒，所以实操上只是"起手看一眼阵容"，但这是数据导致的必然，不是偶发。要连这个一起改（比如让带子第一张提前）等你指令
+- **存档无关**：`waveGap` 本来就在 `SAVE_KEYS` 里（[save.js:1](save.js#L1)），读档恢复的是档里存的那个数字、不重新取 `firstGap`——按老规矩旧档直接作废、不做迁移
+- **验证**（headless Node 真跑代码，不是手算）：六个 `<script>` 全过 `vm.Script` 解析 OK；把 `info/info.js → scenes/menu.js → scenes/test.js → save.js → progress.js → game.js` 按真实顺序灌进 Proxy 桩沙箱后，`levelFirstGap('test1') = 1000`、`levelFirstGap('test2') = 19000`；`SLOTS.test1.waveGap = 1000` / `SLOTS.test2.waveGap = 19000`（建局即对），各自 `resetRun()` 后仍是 1000 / 19000，`wave = 0` 时 `randWaveGap()` 也返回 1000 / 19000（三条路径口径一致）。带权重合计 90、出率 16.7 / 11.1 / 11.1 / 11.1 / 22.2 / 27.8% 由 `INFO` 现算。**未开浏览器**
+- **README 滞后（本轮新增 2 处，未擅自改）**：README.md:76 的关卡字段清单里还没有 `firstGap`（应补成"`firstGap`（本关第一波的等待，ms；不写退回 `CFG.wave.first`）`，并进 `bgm`/`startMilk` 那句 `??` 约定）；README.md:78 波次段开头"首波 `first`"要加一句"关卡可用 `firstGap` 覆盖"。v0.1.85 挂过的那两处（README.md:77 的 `20 → 5 → 1`、README.md:78 拿测试场景1 举的两个例子）仍在，本轮 `15 → 5` / `25 → 5` 让第一处更明显
+
 ## v0.1.85（2026-10-28）
 - 按你点名的四项数值改 [info/info.js](info/info.js) 的 `tracklist.test1` 一个块（:217–:232），**只改关卡数据，一行代码没动**；`test2`、`INFO.monsters` 三条本体、`CFG` 全表（含 `CFG.belt` / `CFG.wave`）、传送带与出怪的机制代码都没碰
 - **波次** `waves: 10 → 20`（:222）。分母没有写死的地方：右下角进度条与"本波打完没"的判断都直接读 `lv.waves`（[scenes/test.js](scenes/test.js):1788、:1797、:601、:2056），所以改一个字段就全跟过去

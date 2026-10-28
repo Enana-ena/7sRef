@@ -85,6 +85,10 @@ function levelStartMilk(key) {
   return INFO.tracklist[key].startMilk ?? INFO.milk.start;
 }
 
+function levelFirstGap(key) {
+  return INFO.tracklist[key].firstGap ?? CFG.wave.first;
+}
+
 function makeRun(key) {
   return {
     slot: key,
@@ -128,7 +132,7 @@ function makeRun(key) {
     loading: false,
     clock: 0,
     wave: 0,
-    waveGap: CFG.wave.first,
+    waveGap: levelFirstGap(key),
     waveHp: 0,
     bigWarned: false,
     banners: [],

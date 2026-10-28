@@ -530,7 +530,7 @@ function isBigWave(w) {
 
 function randWaveGap() {
   const g = CFG.wave;
-  if (state.wave === 0) return g.first;
+  if (state.wave === 0) return levelFirstGap(state.slot);
   return isBigWave(state.wave + 1) ? g.bigGap : g.gapMin + Math.random() * (g.gapMax - g.gapMin);
 }
 
@@ -700,7 +700,7 @@ function resetRun() {
   state.beltScroll = 0;
   state.clock = 0;
   state.wave = 0;
-  state.waveGap = CFG.wave.first;
+  state.waveGap = levelFirstGap(state.slot);
   state.waveHp = 0;
   state.bigWarned = false;
   state.banners = [];

@@ -220,6 +220,7 @@ const INFO = {
       bgm: 'sounds/lawnbgm(1).mp3',
       startMilk: 50,
       waves: 20,
+      firstGap: 1000,
       firstReward: null,
       spawnMul: 3,
       spawnTable: ['chunipenguin', 'chunipenguin_prs', 'chunipenguin_ftr'],
@@ -228,7 +229,7 @@ const INFO = {
       cardSlots: 6,
       deckSelect: false,
       beltPreset: [],
-      beltTable: [{ id: 1, weight: 20 }, { id: 3, weight: 10 }, { id: 4, weight: 10 }, { id: 5, weight: 10 }, { id: 6, weight: 20 }, { id: 8, weight: 20 }],
+      beltTable: [{ id: 1, weight: 15 }, { id: 3, weight: 10 }, { id: 4, weight: 10 }, { id: 5, weight: 10 }, { id: 6, weight: 20 }, { id: 8, weight: 25 }],
     },
     test2: {
       name: '测试场景2',
