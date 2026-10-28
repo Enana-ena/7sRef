@@ -281,6 +281,10 @@ function beltX(i) {
   return CFG.belt.x + i * (CFG.cardSlot.w + CFG.cardGap);
 }
 
+function beltStartT() {
+  return CFG.belt.interval.normal - CFG.belt.first;
+}
+
 function beltItemAt(x, y) {
   const b = CFG.belt;
   const s = CFG.cardSlot;
@@ -692,7 +696,7 @@ function resetRun() {
   state.lineup = [];
   state.flights = [];
   state.belt = [];
-  state.beltT = 0;
+  state.beltT = beltStartT();
   state.beltLast = null;
   state.beltLayers = 0;
   state.beltPresetAt = 0;

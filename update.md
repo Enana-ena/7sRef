@@ -1,5 +1,16 @@
 # 更新日志
 
+## v0.1.87（2026-10-28）
+- 按你「传送带首张卡片立刻出现，写入传送带默认逻辑 + push」：只加**一个 CFG 数字 + 一个起点函数**，把"首张何时到"变成带子自己的默认行为，`scenes/test.js` 的 push / 阈值 / 冻结逻辑与关卡数据一行没改
+- **新字段 `CFG.belt.first = 0`**（单位**秒**，和同块的 `interval.normal/over` 一个量纲；位置就摆在 `interval` 左边 [game.js:16](game.js#L16)），语义是"开场后多久送第一张"，`0` = 立刻。**想退回旧手感把它填 `4` 即可，实测 `first: 4` 复现出 4.000 秒，与改动前逐帧一致** ⇒ 这一个数字就是唯一杠杆，没有第二个开关
+- **实现方式**：带子的计时器 `state.beltT` 本来就是"往上数到阈值就 `beltPush()` 再归零"（[scenes/test.js:518](scenes/test.js#L518)），所以把**起点**设成 `interval.normal - first`（新函数 `beltStartT()`，[scenes/test.js:284](scenes/test.js#L284)）就等于"第一张在 `first` 秒落地"，落完之后照旧 4 秒一张。两个播种点都走这个函数：`makeRun` 建局 [game.js:104](game.js#L104) 与 `resetRun()` [scenes/test.js:699](scenes/test.js#L699)——**没有**给 `state` 添新字段（`beltT` 本来就在 `SAVE_KEYS` 里，导出/读档照旧带走当时的计时器），也**没有**加"是不是第一张"的布尔或分支
+- **起点为什么用 `interval.normal`**：播种那一刻带长恒为 0，而阈值判据是 `belt.length > overAt`（`overAt = 8`），开局必然走 `normal` 这一支 ⇒ 用 `interval.normal` 反推是精确的，不需要读阈值函数；满带时"冻结不重置"那段（`if (state.belt.length < b.cells)` 整个跳过）没动，所以这套预置只在开局空带上生效
+- **"立刻"是哪一刻**：`loop` 在 `state.deckPhase` 期间不调 `updateGame`（[game.js:288](game.js#L288)），时钟也不推进 ⇒ 首张是在 `3 / 2 / 1 / START!` 落下后的**第一帧**送出；开快进（×2）时同样是第一帧（`dt` 翻倍只压缩后面那 4 秒的真实墙钟）。实测（headless 逐帧 `updateGame(0.016)`）：`first = 0` → 第 1 帧就有 1 张、第 2 张在 4.016 秒；`first = 2.5` → 2.512 秒
+- **影响面**：所有 `conveyor: true` 的关（当前只有测试场景1）。`beltPreset` 前缀直出走的是同一条 `beltPush()` 调用，所以配了前缀的关第一张前缀卡也一起提前。非传送带关不受影响：`updateBelt` 挂在 `isConveyor()` 上（[scenes/test.js:2067](scenes/test.js#L2067)），实测测试场景2 跑 100 帧带项仍为 0
+- **顺带解掉上一轮那条提醒**：v0.1.86 说过"第 1 波（START 后 1 秒）到达时手上必然没卡"。现在带上第 0 秒就有 1 张，实测 t = 3.2 秒时是 `wave 1` / 3 只怪 / 带上 1 张——起手能立刻放一张，只是第 2 张仍要等到 4 秒
+- **验证**：六个 `<script>` 全过 `vm.Script` 解析，并按真实顺序灌进 Proxy 桩沙箱真跑 `resetRun` / `updateGame`（含快进、非传送带关、`first` 三档对照）；`beltStartT() = 4`、`SLOTS.*.beltT = 4`、`resetRun` 后仍是 4。**未开浏览器**
+- **README 滞后（本轮新增 2 处，未擅自改）**：README.md:77 的"**开局不带卡，第一张等 4 秒**"现在错了（应改成"首张立刻，之后 4 秒一张"），那句里列举 `CFG.belt = { … }` 的字段清单也缺 `first`。v0.1.85 / v0.1.86 挂账的三处（`20 → 5 → 1`、测试场景1 举的两个例子、关卡字段清单缺 `firstGap` + "首波 `first`"未提关卡覆盖）仍在
+
 ## v0.1.86（2026-10-28）
 - 按你「修改测试场景1 + push」改两处：`beltTable` 的两枚权重（[info/info.js](info/info.js):232），以及**新增一个关卡字段 `firstGap`** 把本关第一波的等待压到 1 秒（[info/info.js](info/info.js):223）；为它动了三个播种/取值点（[game.js:88](game.js#L88)、[game.js:135](game.js#L135)、[scenes/test.js:533](scenes/test.js#L533)、[scenes/test.js:703](scenes/test.js#L703)）
 - **传送带权重** `{1:20 … 8:20}` → `{1:15 3:10 4:10 5:10 6:20 8:25}`，合计**仍是 90**（一减一加刚好抵消），所以四张没点名的卡出率不变：でらっくま `22.2% → 16.7%`、ちびみるく `22.2% → 27.8%`，touchhold / らん / Guy 各 11.1%、めがねっくま 22.2% 照旧。`countPenalty: [3, 4]` / `penaltyValues: [5, 1]` 依然是绝对值覆盖，所以现在三档路径变成 `15 → 5`、`25 → 5`、`10 → 5`

@@ -13,7 +13,7 @@ const CFG = {
   cardGap: 24,
   belt: {
     x: 256, y: 24, cells: 10, speed: 100,
-    interval: { normal: 4, over: 10 }, overAt: 8,
+    first: 0, interval: { normal: 4, over: 10 }, overAt: 8,
     countPenalty: [3, 4], penaltyValues: [5, 1], lastMul: 0.5,
     panelColor: 'rgba(70,50,25,0.65)', stripe: 'rgba(255,255,255,0.08)',
   },
@@ -101,7 +101,7 @@ function makeRun(key) {
     deckPhase: null,
     deckT: 0,
     belt: [],
-    beltT: 0,
+    beltT: beltStartT(),
     beltLast: null,
     beltLayers: 0,
     beltPresetAt: 0,
