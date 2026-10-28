@@ -125,6 +125,7 @@ function pickupReward() {
   state.ceremony = { key: r.key, t: 0, sx: r.x, sy: r.y };
   state.reward = null;
   bgm.pause();
+  playWinMusic();
 }
 
 function burstReward(r, value) {

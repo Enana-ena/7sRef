@@ -28,6 +28,7 @@ const CFG = {
   armor: { death: { fall: 0.15, hold: 0.5, fade: 0.3, run: 90, push: 0.45 } },
   reward: {
     defaultKey: 'moneybag',
+    winMusic: 'sounds/winmusic.ogg',
     rest: { x: 1024, row: 2, dy: -223.2 },
     hitPad: 55,
     halo: { radius: 1.1, alpha: 0.55, color: '255,225,120' },
@@ -154,8 +155,16 @@ const bgm = new Audio(INFO.bgm);
 bgm.loop = true;
 let bgmSrc = INFO.bgm;
 
+const winMusic = new Audio(CFG.reward.winMusic);
+
 function playBgm() {
   const p = bgm.play();
+  if (p && p.catch) p.catch(() => {});
+}
+
+function playWinMusic() {
+  winMusic.currentTime = 0;
+  const p = winMusic.play();
   if (p && p.catch) p.catch(() => {});
 }
 

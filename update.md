@@ -1,5 +1,16 @@
 # 更新日志
 
+## v0.1.88（2026-10-28）
+- 按你「点击关卡胜利的奖励时，播放一次 winmusic.ogg + push」：新增**一个具名 CFG 字段 + 一个一次性音频通道 + 一行调用**，战斗逻辑没动
+- **资源：`sounds/winmusic.ogg` 原本在目录里但没进版本库**（`git ls-files sounds/` 只有三个 mp3，`git check-ignore` 说它没被忽略，仓库里根本没有 `.gitignore`），所以这一轮**把它一起 add 进来**——否则推上去 Pages 会 404 这个文件。规格：20841 字节、Ogg Vorbis、22050 Hz 双声道、**时长 3.482 秒**（拿 Python 逐页走 Ogg 页表 + 读 identification 头算出来的：末页 granule 76770 / 22050）
+- **新字段 `CFG.reward.winMusic = 'sounds/winmusic.ogg'`**（[game.js:31](game.js#L31)，就摆在 `defaultKey` 右边）：路径与"播哪个文件"全在这一处，改这里即可，代码里没有第二处写死文件名
+- **播放通道**：[game.js:158](game.js#L158) `const winMusic = new Audio(CFG.reward.winMusic);` 紧跟在 `bgm` 那三行后面，**没设 `loop`**（默认 `false`）⇒ 天然只放一遍；[game.js:165](game.js#L165) `playWinMusic()` 的形状照抄紧邻的 `playBgm()`（先 `winMusic.currentTime = 0` 再 `play()`，`if (p && p.catch) p.catch(() => {})` 兜住浏览器 autoplay 策略拒绝），差别只有多一句归零——**为了让"重播"是从头播而不是接着上次的尾巴**
+- **调用点只有一个**：`pickupReward()` 里 `bgm.pause()` 之后（[scenes/test.js:128](scenes/test.js#L128)）。`pickupReward` 全仓只有 [scenes/test.js:1968](scenes/test.js#L1968) 一处调用（mousedown 命中 `rewardHit(p)` 才进），而它自己会把 `state.reward = null`，`rewardHit` 随即假 ⇒ **一局只可能播一次**，不存在连点叠播；下一局重新点奖励会再播一次（`currentTime = 0` 保证从开头）
+- **不会和本关 BGM 打架**：`pickupReward()` 本来第一行就 `bgm.pause()`（v0.1.x 起就有），而"点任意处就把 BGM 续上"那句 `if (!state.menuOpen && !state.resumeAsk && bgm.paused) playBgm()` 被前面的 `if (state.ceremony) return;`（[scenes/test.js:1902](scenes/test.js#L1902)）挡在整段结算演出之外 ⇒ 5 秒演出里 BGM 不会被偷偷续播，胜利音乐是独占音道的。**没做音量、淡入淡出、也没在回主菜单时掐它**（没要求）
+- **时长与演出的关系**：3.482 秒 < `CFG.reward.cer.dur = 5` 秒 ⇒ 整段在白光结算演出内放完，不会拖着响到主菜单；把 `cer.dur` 调到 3.5 以下才会出现"回菜单还在响"
+- **验证**（headless 沙箱把 `Audio` 换成记录事件的桩，真跑 `pickupReward`）：六个 `<script>` 过 `vm.Script`；载入阶段事件表为空（**建对象不等于开播**）；`winMusic.src = 'sounds/winmusic.ogg'`、`winMusic.loop = false`；模拟点击后事件序列是 `seek winmusic.ogg -> 0` → `PLAY sounds/winmusic.ogg`（同一次点击里 `bgm` 的 `PAUSE` 在前），且 `state.reward = null` / `state.ceremony` 起 / `state.milks` 10 颗 / `bgm.paused = true`；同局再点 `rewardHit` 返回假、事件表为空；换到第二局再点，重播一次。**真实解码、实际音量、浏览器自动播放策略未验（未开浏览器）**
+- **README 滞后（本轮新增 3 处，未擅自改）**：README.md:26「操作」表里"点击地上的奖励（钱袋）⇒ 领取"那条的流程句该补一步"播一次胜利音乐"；README.md:44 的 `sounds/` 素材清单只列了三个 mp3，没有 `winmusic.ogg`；README.md:83「领取与结算演出」的 `markCleared()` → 收奶 → `burstReward()` → 白光 那个序列里，`bgm.pause()` 之后少了 `playWinMusic()`。v0.1.85 / v0.1.86 / v0.1.87 挂账的五处仍在
+
 ## v0.1.87（2026-10-28）
 - 按你「传送带首张卡片立刻出现，写入传送带默认逻辑 + push」：只加**一个 CFG 数字 + 一个起点函数**，把"首张何时到"变成带子自己的默认行为，`scenes/test.js` 的 push / 阈值 / 冻结逻辑与关卡数据一行没改
 - **新字段 `CFG.belt.first = 0`**（单位**秒**，和同块的 `interval.normal/over` 一个量纲；位置就摆在 `interval` 左边 [game.js:16](game.js#L16)），语义是"开场后多久送第一张"，`0` = 立刻。**想退回旧手感把它填 `4` 即可，实测 `first: 4` 复现出 4.000 秒，与改动前逐帧一致** ⇒ 这一个数字就是唯一杠杆，没有第二个开关
