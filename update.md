@@ -1,5 +1,251 @@
 # 更新日志
 
+## v0.1.101（2026-10-29）
+- 按你「之前的那些提示信息仅在关卡1-1生效，别的关卡不生效」，并据你两点回答落地（**A+C 仅在 1-1 生效；B 仅在 test2 生效**、**关卡行加显式字段**）：**数据 3 行 + 逻辑 1 句**，`info/info.js` 净增 3 行（306→309）、`scenes/test.js` 净增 1 行（2451→2452），`game.js`/`save.js`/`progress.js`/`scenes/menu.js`/`index.html` 一字未动。`git diff --numstat` 的累计值仍含 v0.1.96–v0.1.100
+- **先把三类提示分清**（就是我列给你那份清单的 A/B/C，它们的显示通路本来就不同）：
+  - **A｜1-1 的常驻规则链** `HINT_RULES.lv11`（选中卡片→放格子→点牛奶→收集够/继续收集）[scenes/test.js:568-576](scenes/test.js#L568)，写进 `state.hintRule`
+  - **B｜test2 的规则**「请至少放置3只咪璐库！」[scenes/test.js:563-566](scenes/test.js#L563)，同样写 `state.hintRule`
+  - **C｜3 秒瞬时提示**——4 条文案、**8 处调用点**（我上次写成「六个」是笔误，按代码实数：传送带放置 [:2119](scenes/test.js#L2119)/[:2120](scenes/test.js#L2120)、点卡片 [:2132](scenes/test.js#L2132)/[:2133](scenes/test.js#L2133)、格子放置 [:2150](scenes/test.js#L2150)/[:2151](scenes/test.js#L2151)、数字键 [:2174](scenes/test.js#L2174)/[:2175](scenes/test.js#L2175)），写进 `state.hintEvent`，**不分关卡都会响**——这就是本轮唯一要收的东西
+- **① 新数据字段 `hintEvents`** — [info/info.js:251](info/info.js#L251) `test1: false`、[:273](info/info.js#L273) `test2: false`、[:291](info/info.js#L291) `lv11: true`，三行都紧跟 `bigWave` 之后（与 `bgm`/`bgmLoop` 那组「布尔开关写在一起」的排法一致）。按本项目「未提及的默认值要显式写进数据」的规矩，`test1`/`test2` 的 `false` 也写出来 ⇒ `'hintEvents' in row` 对三行都为真，`hintEvents` 在 `info/info.js` 里正好 3 处、`scenes/test.js` 里 1 处（消费点），别处 0 处
+  - 漏写的行为是**默认关**（`undefined` 为假），所以以后新增关卡行不写这个键就不会有瞬时提示；这条与 `bgmLoop: null` 的「显式写默认」配套
+- **② 门只加在 `showHint` 内一句** — [scenes/test.js:552-555](scenes/test.js#L552) 现在是
+  ```js
+  function showHint(text, hold) {
+    if (!INFO.tracklist[state.slot].hintEvents) return;
+    state.hintEvent = { text, t: 0, hold: hold === undefined ? null : hold };
+  }
+  ```
+  **为什么不改 8 个调用点**：那 8 句分属两条输入路径（`testClick` 的传送带分支/卡片分支 + `testKey` 的数字键分支），逐个加条件既容易漏、又会把「记账」与「显示」缠在一起；收在函数入口 ⇒ 调用点原文一字未动（自检按 4 条文案各 2 处的正则逐条钉住），且以后新增提示点自动带上门限
+  - 门在赋值之前 ⇒ 被挡掉时 `state.hintEvent` **保持 null**，不会写进去再等 `hold` 计时清掉；`t`/`hold` 那套 [:2350-2352](scenes/test.js#L2350) 的推进逻辑没有新分支
+- **③ A/B 没动一行代码**（你要求的是它们**继续只在各自关卡生效**，而这已经是事实）：[scenes/test.js:2354](scenes/test.js#L2354) `state.hintRule = HINT_RULES[state.slot] ? HINT_RULES[state.slot]() : null;` 按槽位键取函数，`HINT_RULES` 只有 `test2`、`lv11` 两个键（[:561](scenes/test.js#L561) 那张表），`test1` 取不到 ⇒ 恒为 null。**这句没有加 `hintEvents` 门**——加了就会把 B 一起杀掉，与你的答案冲突；自检专门断言这一行原文未变
+- **④ 被挡掉的只有"显示"**：`state.placeTimes.push(...)`（[:2118](scenes/test.js#L2118)/[:2149](scenes/test.js#L2149)）、`state.selected`、`state.cool`、`state.milk` 扣费、`state.beltSel` 全部照旧执行，测试场景1/2 的**出怪、冷却、算账与 A 链所依赖的那些计数都不受影响**——只是同一句里不再弹提示条。实测 test1 传送带连放两只：`plants`/`placeTimes` 各 2、`beltSel` 归 -1、`hintEvent` 与 `hintRule` 都是 null；把同一段代码在 `lv11` 上跑（临时置 `conveyor`，跑完 `delete` 还原）则照样写进「别让中二企鹅到达7sRef！」，证明差异只来自数据字段
+- **⑤ 显示优先级与其余管线未动** — [:1933](scenes/test.js#L1933) 仍是 `const htxt = state.hintEvent ? state.hintEvent.text : state.hintRule;`，瞬时提示缺席时**规则条照占同一个位置**，所以 test2 里看到的仍然只有 B，1-1 里 C 优先于 A；`game.js` 的 `hintRule`/`hintEvent` 初值（[game.js:149-150](game.js#L149)）、`resetRun` 的两处归零（[scenes/test.js:764-765](scenes/test.js#L764)）、`drawHint` 都没改
+  - `hideHint()`（[:557-559](scenes/test.js#L557)）**没有加门、也仍然没有调用点**——它只负责清，加门反而会让将来接上它时清不掉
+- **自检** — `vm.Script` 解析 6/6 OK、同一 context 按 `info → menu → test → save → progress → game` 真实加载 6/6 OK、定向断言 **PASS 42 / FAIL 0**：字段三行成对+位置+出现次数、`showHint` 三关门限与 `hold` 缺省支、8 处调用点原文、test1 传送带与 test2 卡片/冷却/奶不足四条路径端到端不写事件（且记账照旧）、同一代码在 lv11 会写、lv11 的 5 段规则链回归、B 在 2 只/3 只咪璐库下的前后值、规则赋值行未加门、`lv11.conveyor` 已还原。**未开浏览器、未合成点击、未截图**（自检里那些 `testClick` 调用只跑在 Node 的 vm 里，没有起页面）
+- **README 滞后（未改，等你指令）**；本轮**未 commit、未 push**（v0.1.93–v0.1.101 的改动都还堆在工作区）
+
+## v0.1.100（2026-10-29）
+- 按你「将测试场景1的bgm改为ultimate battle；循环：播放到112s时跳到8s；首次播放仍从0s开始」：**数据 3 行 + 逻辑 2 行**，改动面 `info/info.js` 净增 3 行（303→306）、`game.js` 净增 2 行（372→374），`scenes/test.js`/`scenes/menu.js`/`save.js`/`progress.js`/`index.html` 一字未动。`git diff --numstat` 的累计值仍含 v0.1.96–v0.1.99
+- **① 换曲** — [info/info.js:252](info/info.js#L252) `bgm: 'sounds/Ultimate Battle.mp3',`（原 `'sounds/lawnbgm(1).mp3'`，[:252](info/info.js#L252)）。文件名带空格照 `Trick Tear.mp3` 的既有写法。`test2`（[:273](info/info.js#L273)）与 `lv11`（[:290](info/info.js#L290)）仍是 `Trick Tear.mp3`；`INFO.bgm`（[:305](info/info.js#L305)）**没动**，仍是 `lawnbgm(1).mp3`——它是「行里不写 `bgm` 时的兜底」，`levelBgm()` 语义未改；现在三行都显式写了 `bgm`，所以这首只在页面加载时作为 `bgm` 初值建元素、不再有关卡用它
+- **② 新数据字段 `bgmLoop`** — [info/info.js:253](info/info.js#L253) `bgmLoop: { at: 112, to: 8 },`（紧跟 `bgm`，单位**秒**，与 v0.1.99 的 `CFG.pickMusic.loopAt` 同系，都是直接对齐 `Audio.currentTime`）。按本项目「未提及的默认值要显式写进数据」的规矩，`test2`（[:274](info/info.js#L274)）与 `lv11`（[:291](info/info.js#L291)）也各补一行 `bgmLoop: null,` ⇒ 三行都有这个键，`'bgmLoop' in row` 全为真，默认无回环点即 `null`。曲名与回环点只出现在数据里，`game.js` 内不含任何关卡名或数字
+- **③ 回环规则** — [game.js:330-331](game.js#L330) 是 `function loop(t)`（[:328](game.js#L328)）里紧跟战前曲取模那两句：
+  ```js
+  const bl = INFO.tracklist[state.slot].bgmLoop;
+  if (bl && !bgm.paused && bgm.currentTime >= bl.at) bgm.currentTime = bl.to;
+  ```
+  放在 `loop()` 首段（早于 `const raw`、早于菜单分支与 `deckPhase` 分支）与 v0.1.99 的理由一致：`updateGame()` 在 `deckPhase`/`menuOpen`/`loading`/`result` 期间根本不跑，`updateDeck()` 反过来也不覆盖那几个分支。**用 `bl.to` 赋值而不是取模**——这里的目标点不是 0，`at → to` 是一段自定义区间 `[8, 112)`，取模会算出 `130 % 112 = 18` 这种错值。`bgmLoop` 全仓库只在这一处被消费
+  - **`!bgm.paused` 这个门顺带解决了菜单期的问题**：三条离场路径（失败→菜单、菜单退出、胜利庆典）都先 `bgm.pause()`，所以主菜单里 `state.slot` 虽然还是上一关的键，这句也不会误动位置
+  - **首次播放从 0s 起是"不加代码"实现的**：`playPickMusic`/`playBgm`/`resetRun`（[:777](scenes/test.js#L777) `bgm.currentTime = 0; state.bgmAt = 0;`）一律没碰，只有越过 112s 那一刻才落到 8s。自检按「首播 `currentTime` 仍为 0」「111.999s 不动」「112→8」「130→8」「240→8」逐条钉住
+  - **续播位置不受扭曲**：`enterRun` 里 `state.bgmAt = bgm.currentTime` 记到的就是回环之后的值（实测回环后离场记到 8），下次进关 `seekMusic(bgm, 8)` 从 8 续，落在 `[8,112)` 区间内不会被立刻弹回
+- **④ 与 v0.1.99 缓存层的配合** — 新曲名第一次被 `levelBgm('test1')` 取到时，`musicFor` 才建它自己的元素（[game.js:169](game.js#L169)），预热窗口仍是进关到 `playBgm()` 之间的 10.5s；`Ultimate Battle.mp3` 与 `Trick Tear.mp3` 各占一个表项，**换关不重赋 `src`、不调 `load()`**（自检断 `__srcSets === 1`、`__loads === 0`）。`lv11` 与 `test2` 共用同一个 `Trick Tear` 元素，且 `test2 → lv11` 来回切不重建（实测 `bgm === 同一元素`）
+- **⑤ 曲长核对** — MPEG 帧扫描（`_tmp` 脚本已删）：4953 帧 × 1152/44100 ⇒ **约 129.4s**，MPEG1 Layer III / 44.1kHz。`at = 112 < 129.4` ⇒ 元素上的原生 `loop = true` 抢不到，自定义回环点先生效（这正是 v0.1.99 §8④ 那条"曲子短于回环点则静默失效"的反面，换曲时这条要重新核）。若不配 `bgmLoop`，这首歌会在 129.4s 自然回绕到 0
+- **⑥ 两条回环规则互不干扰** — 战前曲是 `>= 18 → 取模`，关卡曲是 `>= 112 → 置 8`，各自读各自的元素与各自的门；自检分别断 `pickBgm 17s 不动 & ubEl 120s → 8` 与 `test2/lv11 的 bgmLoop 为 null 时 200s/300s 都不动`
+- **自检** — `vm.Script` 解析 6/6 OK、同一 context 真实加载 6/6 OK、定向断言 **PASS 47 / FAIL 0**（含数据三行成对、`bgmLoop` 只在 loop 一处消费、首播从 0、五组回环数值、菜单暂停门、续播 once 监听与落点、离场 `bgmAt` 记录值、换关不重赋 src、两规则互不干扰、战前曲回归）。**未开浏览器、未合成点击、未截图**
+- **README 滞后（未改，等你指令）**；本轮**未 commit、未 push**（v0.1.93–v0.1.100 的改动都还堆在工作区）
+
+## v0.1.99（2026-10-29）
+- 按你「战前音乐 Choose Your Seeds + 播放延迟改进」交付说明：**新增 1 个 CFG 字段、1 张音频缓存表 + 2 个原语、2 个战前曲函数、1 句循环回绕**，`game.js` 净增 27 行（345→372）、`scenes/test.js` 净增 2 行（2449→2451），`info.js`/`save.js`/`progress.js`/`scenes/menu.js`/`index.html` 一字未动。`git diff --numstat` 的 49/10、132/24 是含 v0.1.96–v0.1.98 的未提交累计
+- **延迟成因（本轮改进的依据）**：旧写法是**单个 `<audio>` 元素换 `src`**——[game.js:166-168 旧三行] `const bgm = new Audio(INFO.bgm); bgm.loop = true; let bgmSrc = INFO.bgm;` + 进关时重赋 `bgm.src`。重赋 src 会让 Chromium 丢弃已缓冲数据、重新拉取并解码，所以每次进关的 bgm 都是冷的，起播要等；改成**按 src 索引的元素表**后，每关的曲子在进关那一刻就建好元素并开始拉数据，`play()` 时缓冲已在
+- **§2 数据** — [game.js:49](game.js#L49) `pickMusic: { src: 'sounds/Choose Your Seeds.mp3', loopAt: 18 },`，落在 `banner`（:48）与 `hint`（:50）之间。`loopAt` 单位**秒**（直接对齐 `Audio.currentTime`，跟 `CFG.deck`/`CFG.hint`/`CFG.banner` 的演出时长同系，不是 `state.clock` 那套毫秒）。曲名+循环点**全仓库只这一处字面量**（自检按 `game.js` 内出现 1 次、`menu.js`/`test.js` 内 0 次钉住），文件确实存在（1.3MB）
+- **§3 缓存层** — [game.js:167-186](game.js#L167) `const MUSIC = {}` → `function musicFor(src)`（[:169](game.js#L169)）→ `function seekMusic(m, at)`（[:180](game.js#L180)）→ `let bgm = musicFor(INFO.bgm);`（[:186](game.js#L186)）
+  - `musicFor` 内**先 `a.preload = 'auto'` 再 `a.src = src`**（构造器 `new Audio(src)` 会按默认 preload 立刻开始资源选择，之后改就晚了），并且 `if (m) return m` 的**早返回保证已存在的元素不会被再 `.load()` 或再赋 src**——那会清空缓冲，正好把预热打掉。自检用桩记 `__srcSets`/`__loads`：进 lv11 后该元素 `src` 赋值次数 = 1、全仓库 `load()` 调用次数 = 0
+  - `musicFor` 必须是**函数声明**（要提升，`let bgm = musicFor(...)` 在它下面）
+  - `bgm` 由 `const` 改 `let`、**标识符名不变** ⇒ `bgmSrc` 变量整体删除（`typeof bgmSrc === 'undefined'` 且源码里已无该串），test.js 那七处引用一行没改（见⑦）
+  - 不做 fade、不做音量渐变、不加 `setVolume`、不引入 `CFG.sfx` 空表（无消费者）——自检断 `CFG` 无 `sfx` 键、新代码段无 fade/volume 字样
+  - `seekMusic(m, at)`：`at <= 0` 直接返回（首播本就在 0，挂监听是多余的）；`m.readyState >= 1` 立即 `currentTime = at`；否则挂 `{ once: true }` 的 `loadedmetadata` 延后落点。三条分支各一条单测（冷元素先挂 1 个监听、`currentTime` 仍 0 → 触发后落 12；热元素立即落 7 且不挂监听）
+- **§4 `enterRun()`** — [game.js:231-232](game.js#L231) 原文 `bgm = musicFor(levelBgm(key));` / `seekMusic(bgm, slot.bgmAt);`，替掉旧的 6 行 `const src = levelBgm(key); if (src !== bgmSrc) {...} bgm.currentTime = slot.bgmAt;`。**这一句同时是 A1 的预热点**：进关瞬间就建好本关元素并开始拉数据，而 `playBgm()` 要到 10.5s 之后才响；它也在「有存档 → 弹继续/重开 → 点继续直接 `playBgm()`」这条不经过 `beginDeck` 的通路之前。[:221](game.js#L221) `state.bgmAt = bgm.currentTime;`、`hasRunRecord` 分流、`beginRun()` 全部原样
+- **§5 战前曲** — [game.js:201](game.js#L201) `const pickBgm = musicFor(CFG.pickMusic.src);` 写在脚本顶层（`musicFor` 之后、`enterRun` 之前），脚本求值早于菜单第一帧 ⇒ **主菜单时这首曲子已经在缓存里**，不需要额外补调用。[:203-207](game.js#L203) `playPickMusic()` 形状逐字照抄紧邻的 `playWinMusic()`（先归零 → `play()` → `if (p && p.catch) p.catch(() => {});`），[:209-211](game.js#L209) `stopPickMusic()` 只一句 `pickBgm.pause();`
+  - **起播** [scenes/test.js:901](scenes/test.js#L901) `playPickMusic();` 是 `beginDeck(pick)` 函数体第一行（上文 :898 `}` / :899 空行 / :900 `function beginDeck(pick) {`，下文 :902 `state.deck = (pick || isConveyor()) ? emptyDeck() : fullDeck();` / :903 `state.cool = deckCool(state.deck);`）。`beginDeck` 唯一调用点仍是 [:897](scenes/test.js#L897)（`beginRun()` 判完 `showMonsters === false` 之后）⇒ `showMonsters:false` 的关走 [:894 playBgm()](scenes/test.js#L894) 不播；点「继续」走 [:2036 playBgm()](scenes/test.js#L2036) 不播；三条「重新开始」都是 `resetRun()+beginRun()` ⇒ 播，且每次从 0 起（归零在 `playPickMusic` 里）
+  - **停止** [scenes/test.js:952](scenes/test.js#L952) `stopPickMusic();`，上下文：:949 `resetGmilks(state);` → :950 `state.deckPhase = null;` → :951 `state.deckT = 0;` → **:952 `stopPickMusic();`** → :953 `playBgm();`。硬切不淡出，**这是唯一停止点**（`deckPhase` 期间 `drawMenuBtn(!state.deckPhase)` 不画菜单按钮、点击全被 `deckClick` 截走、三条回菜单的路都要求 `deckPhase` 已是 null），自检断 `playPickMusic();`/`stopPickMusic();` 在 test.js 各只出现 1 次
+- **§6 回绕** — [game.js:329](game.js#L329) 是 `function loop(t)`（[:328](game.js#L328)）的**第一句**，早于 `const raw`、早于菜单分支与 `deckPhase` 分支：`if (!pickBgm.paused && pickBgm.currentTime >= CFG.pickMusic.loopAt) pickBgm.currentTime = pickBgm.currentTime % CFG.pickMusic.loopAt;`。**取模而非置 0**：后台标签页 rAF 被节流时这句可能几十秒没跑，`currentTime` 会到 41/65 这种值，置 0 会把中段整段跳掉，取模回到本轮循环的正确位置（实测 41→5、65→11、18→0、17.4 不动、`paused` 时不动、从 200 连喂 5 次仍落在 `[0,18)`）。没放进 `updateGame()`（`deckPhase` 期间根本不跑）也没放进 `updateDeck()`（`menuOpen`/`loading`/`result` 分支都不经过）⇒ test.js 里不含任何 `pickBgm`/`loopAt` 字样
+- **§7 预热分组落位** — 第一组＝脚本顶层求值（`pickBgm`，将来所有音效都挂这里）；第二组＝`enterRun()` 的 `musicFor(levelBgm(key))`（本关 bgm）；第三组＝[game.js:188](game.js#L188) `const winMusic = new Audio(CFG.reward.winMusic)`（**A2：保持原样、不进缓存表**，20KB 一次性不循环，脚本加载时建好即已预热，`playWinMusic()` 未动）。`decodeAudioData` 那条零延迟路子不采用：`file://` 下 fetch 被 CORS 挡死，而 README 要求双击直跑不起服务器
+- **§8 地雷逐条核过** — ① 战前曲**没有**共用 `bgm` 元素：`playBgm()` 与 `setMenu()` 两个函数体内都不引用 `pickBgm`，所以 :221 的 `state.bgmAt` 存不到战前曲位置、:2023 的 `bgm.paused` 补播判断不错位 ② 实测 `needPick()` = `{test1:false, test2:true, lv11:false}`，且 `hold 1.5 + panIn 1.5 + settle 1 + panOut 1.5 + count 5 = 10.5 < 18` ⇒ 只有 test2 停在选卡界面才会回绕，**未加任何特判** ③ 表内 src 只有 `INFO.bgm` 与曲名两项，逐关 `levelBgm()` 比对无一只等于 `CFG.pickMusic.src` ④ 曲子短于 18s 时本规则静默失效（原生 loop 先响），代码未动 ⑤ `bgm` 全仓库只在 `enterRun` 一处赋值（`bgm = musicFor` 正则匹配 1 次，test.js 内无 `bgm = `）⑥ `seekMusic` 的 `at <= 0` 早返回已单测
+- **自检** — `vm.Script` 解析 6/6 OK、同一 `vm` context 按 `info → menu → test → save → progress → game` 真实加载 6/6 OK（`Audio` 桩记录 `play/pause/load/src 赋值/preload`，`localStorage`/`Image`/canvas 全桩），定向断言 **PASS 72 / FAIL 0**：顶层只建 3 个元素（bgm + pickBgm + winMusic）且 `winMusic` 不在 `MUSIC` 里、`preload` 先于 `src`、表里统一 `loop = true`、进关换向不重赋 src 不调 load、冷/热/零三种 seek 分支、起播每次从 0、`showMonsters:false` 与「继续」两条不播、停止落在 `deckPhase = null` 之后且 `playBgm()` 之前（用 `calls` 序列断 `pause(战前曲)` 紧邻 `play(关卡曲)`）、取模五组数值、菜单渲染不产生任何音频调用。**未开浏览器、未合成点击、未截图**
+- **README 滞后（未改，等你指令）**；本轮**未 commit、未 push**（v0.1.93–v0.1.99 的改动都还堆在工作区）
+
+## v0.1.98（2026-10-29）
+- 按你「主菜单右下角新增"清除缓存"按钮，点击后清理存档内容为默认值」，并按你确认的两项选择（清除范围＝**运行存档 + 全局解锁都清**；交互＝**先二次确认再清除**）：**新增 3 个函数 + 1 个运行态标志 + 3 个菜单 rect**，改动面 `save.js` 15 行、`scenes/menu.js` 28 行、`game.js` 1 行，`info.js`/`test.js`/`progress.js`/`index.html` 一行没动。`git diff --numstat` 的 13/1、16/1、45/5 是含 v0.1.96–v0.1.97 的未提交累计
+- **① 擦除原语** — [save.js:24-30](save.js#L24) `cacheErase(key)`，与 `cacheRead`/`cacheWrite` 同构：`localStorage.removeItem(LS_PREFIX + key)`，`try/catch` 里 `console.warn('浏览器缓存清除失败 ' + key, e)`。**沿用同一个 `LS_PREFIX`**，所以真被删掉的键是带前缀的 `apollo7s:save:test1|test2|lv11` 与 `apollo7s:save:apollo7s:progress`
+- **② 清除动作** — [save.js:32-37](save.js#L32) `clearSaves()`：`for (const key of Object.keys(SLOTS)) cacheErase(key)` → `cacheErase(PROGRESS_KEY)` → `initProgress()` → `for (const key of Object.keys(SLOTS)) Object.assign(SLOTS[key], makeRun(key))`。**顺序敏感**：`makeRun` 里 `deck: fullDeck(key)`、`cool` 长度都走 `slotCount(key)` → `getSlots()` → `progress.slots`，所以必须先 `initProgress()` 把 progress 复位，再重建槽；反了就会用旧的 8 槽去铺新卡组（自检按「清除后三槽 `deck.length === 6`、`SLOTS.lv11.deck === [0,null,null,null,null,null]`」钉死）
+- **③ 就地复位，不整体替换** — 用 `Object.assign(SLOTS[key], makeRun(key))` 而不是 `SLOTS[key] = makeRun(key)`：[game.js:163](game.js#L163) `let state = SLOTS.test1`，主菜单渲染的就是这个对象，整体替换会让 `state` 指向已被丢弃的旧对象（鼠标位置、后续 `writeRun()` 全都脱钩）。自检断言 `清除后 state 引用不变` 与 `SLOTS.test1 === 清除前引用`
+- **④ 运行态标志** — [game.js:104](game.js#L104) `clearAsk: false`，紧跟 `notice: false`（[:103](game.js#L103)）。**没进 `SAVE_KEYS`**，与 `notice` 一样属于菜单态、不落盘；`makeRun` 带着它 ⇒ `clearSaves()` 顺带把确认框关掉（自检断言点「确定」后 `clearAsk === false` 且 `notice === false`）
+- **⑤ 按钮 rect** — [scenes/menu.js:17](scenes/menu.js#L17) `const cb = { x: CFG.W - mb.btnPad - mb.btnW, y: CFG.H - mb.btnPad - mb.btnH, w: mb.btnW, h: mb.btnH }`，**完全复用 `CFG.menu`**（[:22](game.js#L22) `btnW:160 btnH:64 btnPad:24`），只把 `mb.btnY` 换成 `CFG.H - mb.btnPad - mb.btnH` ⇒ 贴右下角，导出的新 `menuRects()` 键 `clearBtn`（[:29](scenes/menu.js#L29)）
+- **⑥ 确认框两个按钮** — [scenes/menu.js:25-26](scenes/menu.js#L25) `askYes`/`askNo`，**复用已有的 `notice` 面板 rect（640×260，居中）**，不新建面板字面量：两个 `w:240, h:64` 分别落在 `notice.x + 60` / `notice.x + 340`，`y` 与 `notice.y + 150` 和 `back` 同排。自检断言两按钮都完全在面板内、互不重叠
+- **⑦ 点击分支** — [scenes/menu.js:52-55](scenes/menu.js#L52) 点 `clearBtn` 只 `state.clearAsk = true` 后 `return`；[:56-64](scenes/menu.js#L56) `state.clearAsk` 为真时**吞掉其余一切点击**（点关卡按钮不会进关），只有 `askYes` → `clearSaves()` + 关框、`askNo` → 关框。**插入位置在 `state.notice` 分支之前**，`import`/`export` 两个分支仍然在最前 ⇒ 右上角导入/导出的既有优先级一字未改（v0.1.96 之前定的顺序保持）
+- **⑧ 悬停** — [scenes/menu.js:35-38](scenes/menu.js#L35) `clearBtn` 加入无条件那段（跟导入/导出同级），确认框的两个按钮进嵌套三元的最上层：`state.clearAsk ? askYes||askNo : state.notice ? back : start||test1||test2`
+- **⑨ 绘制** — [scenes/menu.js:83](scenes/menu.js#L83) `drawButton(m.clearBtn, '清除缓存')` 与导入/导出同批（所以确认框弹出时三个角按钮仍可见），[:84-92](scenes/menu.js#L84) `state.clearAsk` 分支在 `state.notice` 分支**之前**：`drawPanel(m.notice)` + `'确定要清除全部存档吗？'`（`bold 44px sans-serif`，`notice.y + 80`，与「该内容还未开发」同一写法）+ `drawButton(askYes,'确定')` + `drawButton(askNo,'返回')` + `return`
+- **⚠ 两块面板共用 rect** — 因此 `notice` 与 `clearAsk` 同时为真时（在「未开发」面板上点清除缓存就能叠出来）**确认面板优先绘制、也优先吃掉点击**，`back` 与 `askYes`/`askNo` 同排会重叠。已用断言钉住这个行为（`两层同真时优先确认面板` / `两层同真时点中心走确认分支` / `点返回只关确认`）；若要彼此独立需要给确认框单独的面板 rect，等你指令
+- **⚠ 不受影响的东西** — 磁盘上导出过的 `save_*.json` 与 `menuRects` 无关、也不会被清；清除只动浏览器缓存。`window.showDirectoryPicker` 那条路径一行未碰
+- **自检** — `vm.Script` 解析 6/6 OK、在同一个 `vm` context 里按 `info → menu → test → save → progress → game` 真实加载 6/6 OK（localStorage/Image/Audio/canvas 全桩），定向断言 **PASS 99 / FAIL 0**：确认前不擦（三槽 + 进度键仍在、`getSlots()` 仍 8）、点返回不擦、点确定后 `store.size === 0`、progress 回默认（`cleared {}` / `slots null` / `net false` / `adv {"id":101,"status":0}` / `cards` 只留 id1）、`isCardUnlocked(2)` 由 true 回 false、`advKey()` 回 `'lv11'`、`lv11` 的 `netUnlocked()` 回 false 而 `test1` 仍 true、三槽 `clock/plants/monsters/milks/deaths/ashes/placeTimes/reward/milk/milkClicked` 全回初始、`SAVE_KEYS` 不含 `clearAsk`/`notice` 但仍含 `placeTimes`/`milkClicked`、菜单三入口与「未开发」面板的旧路径回归（点测试场景1 进 `scene:'game'`、冒险已通时点开始弹未开发、点返回关掉）。**未开浏览器、未合成点击、未截图**
+- **README 滞后（未改，等你指令）**；本轮**未 commit、未 push**（v0.1.93–v0.1.98 的改动都还堆在工作区）
+
+## v0.1.97（2026-10-29）
+- 按你「1-1出怪表只有id101；最后一波虽然出怪量*2.5，但是催波仍然按小波计算」：**两处改动**——① `lv11.spawnTable` 收缩成只剩 `chunipenguin`（id 101）② `waveCutCheck()` 的大波分支加 `bigShown()` 门 ⇒ 冒险关的末波催波按小波算。`git diff --numstat` 本轮净增 [info/info.js](info/info.js) 1 行改、[scenes/test.js](scenes/test.js) 1 行改（文件级累计 33/0 与 130/24 是含 v0.1.96 的未提交总量）
+- **覆盖 v0.1.96 的两处记载**：v0.1.96 §3 写的 `lv11` 三企鹅出怪表、§11 列的"三个门点"现在分别是"一企鹅出怪表"与"**四个**门点"，以下为现值
+- **① 出怪表** — [info/info.js:293](info/info.js#L293) `spawnTable: ['chunipenguin'],`（原 `['chunipenguin', 'chunipenguin_prs', 'chunipenguin_ftr']`）。`lv11` 其余字段一个没动（`showMonsters`/`deckSelect`/`firstReward`/`rows: [2]`/两个 Gate 全部原样，自检逐条比对过）；`test1`（[:258](info/info.js#L258)）与 `test2`（[:277](info/info.js#L277)）仍是三种
+  - **连带效果（都来自这一处数据，代码没加判定）**：1-1 **不再出现 prs/ftr 防具怪**；[spawnWave 末波补种 :600-613](scenes/test.js#L600-L613) 的"每种一只"现在只播 1 只种子，剩下按 `pickMonster` 从单元素表里补足；[buildLineup :832](scenes/test.js#L832) 直接读 `spawnTable` ⇒ **战前全景阵容只剩中二企鹅**（展示只数仍按 `CFG.deck.minShow` 补足）
+  - 末波强度实测：`unit = min(ceil(4/3), 8) = 2` ⇒ 预算 `ceil(2 × spawnMul 1 × bigMul 2.5) = 5`，每只 `level 1` ⇒ **第 3 波 1 只、第 4 波 5 只**，且 5 只全是 `chunipenguin`、全在 row 2
+- **② 末波催波按小波** — [scenes/test.js:629](scenes/test.js#L629) `waveCutCheck()` 首行由 `if (isBigWave(state.wave + 1)) {` 改成 `if (bigShown() && isBigWave(state.wave + 1)) {`
+  - 分支语义差别：大波分支是"**只有全空**才催、且只催到 `CFG.wave.bigCutGap` 9000ms"，小波分支是"本波残血 `< 65%`(`hpCut`) 就催到 `cutGap` **3000ms**（不必全空）"。1-1 里 `isBigWave(4)` 仍为真（`w === lv.waves`），改的是**走哪条分支**
+  - ⇒ 1-1 的**第 3 波 → 第 4 波**不再需要清场，打掉末波 35% 的血就催波，间隔也被压到 3 秒级；`bigShown()` 为门 ⇒ **test1/test2 完全不变**（第 10/20/30 波仍是"全空 + 9000ms"，自检逐条对比过）
+  - 与 `isBigWave()` 的边界照旧：**没改 `isBigWave()` 本体** ⇒ `spawnWave` 的 ×2.5 预算与 `bigSeed` 补种不受影响（你上一轮的指示仍然成立）；`randWaveGap`([:588](scenes/test.js#L588))、`waveWarnCheck`([:639](scenes/test.js#L639))、进度条标识([:1912](scenes/test.js#L1912)) 这三处 v0.1.96 的门点未动，`bigShown()` 现在总共**四个**调用点
+  - **⚠ 这是"只对冒险关生效"的读法**：如果你想让 test1/test2 的末波也按小波催，改法不同（在 `waveCutCheck` 里把 `w === lv.waves` 排除掉，而不是用 `bigShown()`），本轮按 1-1 的语境落、没这么写
+- **验证（157 PASS / 0 FAIL）**：六脚本 `vm.Script` **PARSE OK × 6**；沿用 v0.1.96 那套打桩 `vm` 全量实跑（14 组断言原样跑通，含 §14 修订的提示生命周期、断网四点、`rows` 五面、`gateOpen` 时序、存档 34 键与读档不重新计时），新增第 15 组 13 条：出怪表内容与 `test1/test2` 未受牵连、`lv11` 其余字段逐条比对、`buildLineup` 只剩一种怪、`isBigWave(4)` 仍真 + `bigShown()` 仍假、**催波三态**（1-1 残血 80% 不催 / 60% 立即催到 `clock - lastSpawn + 3000`、test2 末波前非全空不催 / 全空催到 9000、test1 第 10 波逻辑不变）、末波出怪量 1 只 → 5 只、5 只全 `chunipenguin` 且全 row 2、末波间隔仍小于 40000。自检脚本已删除
+- **README 滞后（未改，等你指令）**：本轮只收缩 1-1 的出怪表与调末波催波，README 仍按"两个测试场景"滞后（v0.1.96 已挂的那条继续挂着）
+- **未开浏览器、未合成点击、未截图**；**未 commit、未 push**
+
+## v0.1.96（2026-10-29）
+- 按你的交付说明「冒险模式首关「关卡1-1」+ 全局解锁存档」（§2–§14，含 §14 修订）：**新增第一条冒险关卡 `lv11`、全局解锁存档（卡片解锁 / 断网解锁 / 冒险进度）、卡片与断网的解锁门控、只对测试关开放的调试选项、出怪与自然掉落的"放下伙伴后才开始计时"门控、提示设施单槽改双槽、1-1 的九条教学提示**。改动六文件 [info/info.js](info/info.js)、[progress.js](progress.js)、[game.js](game.js)、[save.js](save.js)、[scenes/menu.js](scenes/menu.js)、[scenes/test.js](scenes/test.js)；`index.html`、脚本加载顺序、美术资源**零改动**（奖励卡面直接复用 `images/cards/card_milk.png`）
+- **§1 四条自决项照说明落地（你可否决）**：**A1** 测试场景连断网也不受解锁限制（只写在 `netUnlocked()` 一处，要改成"测试关也锁断网"就动那一行）；**A2** 战前全景 `buildLineup()` 的怪物分行**不套** `rows`，仍铺五行；**A3** `drawGrid` 是共用的 ⇒ 1-1 战前全景阶段同样只渲染第三行方格线（同函数同数据，没特判）；**A4** `progress.adv` 无存档时缺省写死 `{ id: 101, status: 0 }`，不从 `tracklist` 推导"第一关"
+
+### §2 全局存档（[progress.js:1-61](progress.js#L1-L61)，改后 37 → **61** 行）
+- [progress.js:3](progress.js#L3)：`let progress = { cleared: {}, slots: null, cards: [], net: false, adv: { id: 101, status: 0 } };`
+- `initProgress()` 里逐字段回落，**没加额外校验、没加 NaN 兜底**：`cleared` 非对象 ⇒ `{}`；`slots` 非 number ⇒ `null`；`cards` 用 `Array.isArray(o.cards) ? o.cards : firstCards`，其中 `firstCards` 是 [progress.js:13-14](progress.js#L13-L14) 的 `const firstCards = []; firstCards[1] = true;` ⇒ 序列化形如 `[null,true]`；`net` 只在 `o.net === true` 时为真；`adv` 取 `const a = o.adv && typeof o.adv === 'object' ? o.adv : {}`（[:15](progress.js#L15)）后 `id`/`status` 各自判类型，不符则用 `101` / `0`
+- **新 API 四个**（[:43-61](progress.js#L43-L61)，全部即时 `cacheWrite(PROGRESS_KEY, JSON.stringify(progress))`，与 `markCleared`/`setSlots` 同款）：`isCardUnlocked(id)` 按 **id 下标**读稀疏 bool 数组（不是 `CARDS` 下标，也没用 `{ '1': true }` 对象）；`unlockCard(id)`；`netUnlocked()` = `progress.net === true || INFO.tracklist[state.slot].test === true`；`markAdvDone(id)` 只在 `progress.adv.id === id` 时把 `status` 置 1
+- `cleared` 原语义未动（仍驱动 `rewardKey()` 的首通资格），`adv.status` 只作冒险进度，两者在 §9 的同一时刻各写各的；`progress` 新字段**都不进 `SAVE_KEYS`、不参与导入导出、`resetRun` 不清**
+
+### §3 关卡数据（[info/info.js:284-301](info/info.js#L284-L301)）
+- `tracklist` 新增第三条目 `lv11`（放在 `test2` 之后），整段照说明原文，未增删字段：`name: '关卡1-1'` / `id: 101` / `test: false` / `bigWave: false` / `bg: 'images/backgrounds/bg1.png'` / `bgm: 'sounds/Trick Tear.mp3'` / `startMilk: 150` / `waves: 4` / `firstGap: 3000` / `spawnMul: 1` / 三种中二企鹅 `spawnTable` / `showMonsters: true` / `deckSelect: true` / `firstReward: 'cardmilk'` / `rows: [2]` / `spawnGate: { plants: 2, delay: 3000 }` / `milkGate: { plants: 1, delay: 3000 }`。可选字段（`rows`/`spawnGate`/`milkGate`）在 `test1`/`test2` 里**缺省即无**、没写 `null`
+- [test1](info/info.js#L247-L249) 与 [test2](info/info.js#L266-L268) 各补 `id: null` / `test: true` / `bigWave: true` 三行（紧跟 `name`），其余一个字节没改（`test1` 的 `conveyor`/`beltTable`/`beltPreset`、`test2` 的 `cardSlots` 原样）
+- `id: 101` 与 `INFO.monsters.chunipenguin.id: 101` 同名不同表，互不干扰；key 就叫 `lv11`（**换 key 等于丢档**：key 同时是 `SLOTS` 键与 localStorage 槽名 `apollo7s:save:lv11`）
+- `deckSelect: true` 本关**当前是惰性字段**（见下面 §6 的连带后果），照写不误，没为"让它生效"改判定
+- [game.js:161](game.js#L161) `const SLOTS = { test1: …, test2: …, lv11: makeRun('lv11') };`
+
+### §4 冒险入口（[scenes/menu.js:1-10](scenes/menu.js#L1-L10)）
+- 新增两个查表函数放在 `menu.js` 顶部（全仓**只这一处**）：`levelKeyById(id)` 遍历 `INFO.tracklist` 找 `id` 相同的 key；`advKey()` = `progress.adv.status === 0` 时返回该 key，否则 `null`
+- [`menuClick` 的 `start` 分支 :51-53](scenes/menu.js#L51-L53) 由 `state.notice = true` 改成 `const k = advKey(); if (k) enterRun(k); else state.notice = true;` ⇒ 未通过进 1-1，已通过且不存在下一关时弹**原来的**「该内容还未开发」面板（[scenes/menu.js:69](scenes/menu.js#L69)），没新建 UI
+- `menuRects` / `renderMenu` 三按钮布局与文案、`menuHover` 指针判定**均未改**
+
+### §5 奖励物：卡面即奖励（[info/info.js:229-243](info/info.js#L229-L243)）
+```js
+    moneybag: { name: '钱袋', img: 'images/others/moneybag.png', scale: 1.00, milk: 250, unlock: null },
+    cardmilk: { name: 'ちびみるく卡片', img: 'images/cards/card_milk.png', scale: 1.00, milk: null, unlock: 2 },
+```
+（**排版差异**：这两条按文件里既有的多行风格书写——每个字段单独一行——字段名与值和上面完全一致，只是没压成一行）
+- `milk: null` ⇒ `if (rw.milk) burstReward(...)` 天然不触发爆奶；`unlock: 2` 由 §9 消费
+- **价格不会被画上去**：[drawReward() :1466-1479](scenes/test.js#L1466-L1479) 只 `ctx.drawImage(imgs['rew_' + r.key], …)`，**没有**复用 `drawCardFace`（价格文字是 `drawCardFace` 动态叠加的）；`scale: 1.00` ⇒ `rewardSize()` 走 `CFG.milk.size` = 120 高，`card_milk.png` 是 620×620 方图 ⇒ 120×120，与钱袋同尺寸
+- 加载零改动：`INFO.rewards` 的预加载循环（[game.js:333](game.js#L333)）自动产出 `imgs.rew_cardmilk`，自检核对 `imgs['rew_cardmilk'].src === 'images/cards/card_milk.png'`；同一张 PNG 以 `card_milk` / `rew_cardmilk` 两个键各加载一份（说明认可，可接受）
+- 掉落位置、点击飞向 `CFG.reward.rest`、5s 白幕回菜单一律没动
+
+### §6 卡片解锁面（单一入口 + 六处改动）
+- 新增 [usableCards(k) :785-790](scenes/test.js#L785-L790)，原文照说明：`lv.test === true || isCardUnlocked(CARDS[i].info.id)`，返回 `CARDS` 下标数组（顺序 = id 升序）
+- 六处改动（行号现读）：①[needPick() :889](scenes/test.js#L889) `slotCount() < usableCards().length` ②[deckTarget() :808](scenes/test.js#L808) `Math.min(slotCount(), usableCards().length)` ③[fullDeck(k) :792-797](scenes/test.js#L792-L797) 改成先取 `const u = usableCards(k)`，再 `d.push(i < u.length ? u[i] : null)` ④[选卡池绘制 :1156-1160](scenes/test.js#L1156-L1160)：`const ci = cardBySlotId(i + 1);` 之后 `if (ci >= 0 && !usable.includes(ci)) continue;`——**什么都不画**（不灰显、不 `drawEmptySlot`），且放在 `ci < 0 → drawEmptySlot` 之前；判定只用了 `usableCards().includes(ci)` 这一种写法 ⑤[poolCard() :987-989](scenes/test.js#L987-L989) 未解锁格当作没命中（`continue`），点不出声 ⑥[drawCardHud](scenes/test.js#L1550) / `testKey` 的数字键分支**没加判定**（`state.deck` 由 `fullDeck`/选卡生成，本来就只含可用卡），`beltTable` 走 `CARDS_BY_ID`、测试关不受限 ⇒ 未动
+- **已确认的连带后果（写进备注，未为此改判定）**：1-1 首通前可用卡 1 张 < 6 槽 ⇒ `needPick()` 为假 ⇒ **不进选卡**，走「战前全景 → 自动卡组（id1 + 5 空槽）开局」；首通拿到 id2 后仍 2 < 6 ⇒ 还是不选卡。所以 `deckSelect: true` 目前对 1-1 是惰性的
+
+### §7 断网四处门控（`netUnlocked()`）
+1. **绘制**：[drawTopHud :1655-1657](scenes/test.js#L1655-L1657) 在 `if (isConveyor()) drawBelt(); else drawCardHud(pick);` 之后加 `if (!netUnlocked()) return;` ⇒ 整块 net 面板（底框 + `imgs.net_err` + 环 + 高亮框）都不画，选卡阶段同样
+2. **鼠标跟随预览**：[:1881-1886](scenes/test.js#L1881-L1886) 的 `if (state.net) { drawImage(imgs.net_err, 鼠标位置…) }` **保持不加判定**（第 3、4 条已保证未解锁时 `state.net` 恒 `false`，两处都加是重复）
+3. **点击切换**：[:2096](scenes/test.js#L2096) `if (netUnlocked() && inRect(p, netRect())) {` ⇒ 未解锁时整段跳过、点击落到后续分支，等价于"点那里什么都没发生"（没有吞掉点击）
+4. **快捷键**：[:2175](scenes/test.js#L2175) `` if (e.key === '`' && netUnlocked()) { `` ⇒ 未解锁按键无反应
+- 不变项照旧：`if (state.net)` 的移除植物分支、`resetRun` / `beginRun` / Escape 里的 `state.net = false` 均未改；测试关 `test: true` ⇒ 恒可用（A1）
+- **⚠ 一个 §7 没列、所以我没动的面（等你发话）**：[渲染里 `inRect(state.mouse, nr)` 那条 `drawTip(nr.x + nr.w/2, nr.y + nr.h + 8, ['断网'])`](scenes/test.js#L1877) ——断网位的**悬浮说明**没有面板可画了，但鼠标停在该区域仍会浮出「断网」气泡。四处门控不含它，本轮严格范围没加判定
+
+### §8 选项面板只对测试场景（[game.js:65-68](game.js#L65-L68)）
+- `OPTS` 四项数据未改；新增 `visibleOpts()` = `lv.test === true ? OPTS : OPTS.filter(o => o.key !== 'noNatural' && o.key !== 'noCool')`
+- 三处遍历全部改成基于过滤后数组的**重排下标**：绘制 [test.js:1090](scenes/test.js#L1090)（`const vo = visibleOpts();` + `vo[i].key` / `vo[i].label`，行位仍走 `ui.optRow(i)` ⇒ 冒险关只剩「快速模式」「自动收集」两项并**上移补位**，面板尺寸不动）、hover 指针判定 [:1993](scenes/test.js#L1993)（`visibleOpts().some(…)`）、点击切换 [:2070](scenes/test.js#L2070)（`const vo = visibleOpts();`）
+- **补上的坑**：选项是会话级、不存档，所以 [enterRun() game.js:195](game.js#L195) 加 `if (INFO.tracklist[key].test !== true) { slot.opts.noNatural = false; slot.opts.noCool = false; }` ⇒ 在测试关开过 `noNatural` / `noCool` 再进 1-1 时强制关掉，不会卡死教学（`fast` / `autoCollect` 仍跨关保留）
+
+### §9 通关写盘（[pickupReward :120-127](scenes/test.js#L120-L127)）
+- `markCleared(state.slot);` 紧下方依次 `if (rw.unlock) unlockCard(rw.unlock);` 与 `const lvId = INFO.tracklist[state.slot].id; if (lvId !== null) markAdvDone(lvId);` ⇒ 顺序仍是"先 `markCleared` 再解锁"，测试关 `id === null` 时什么都不写；三处各自即时写盘
+- 掉落侧 [rewardKey() :93](scenes/test.js#L93) `if (lv.firstReward && !isCleared(state.slot)) return lv.firstReward;` 未改 ⇒ **非首通重玩 1-1 掉的是默认钱袋 250 奶、不再重复发解锁**（自检覆盖）
+
+### §10 `rows: [2]` 一处驱动五处
+1. **方格线** [drawGrid :1529-1541](scenes/test.js#L1529-L1541)：`const rows = INFO.tracklist[state.slot].rows;` ⇒ 横线 `if (rows && !rows.includes(r) && !rows.includes(r - 1)) continue;`（只画 `r === row` 与 `r === row + 1`），竖线用 `top = g.y + Math.min(...rows) * g.ch` / `bottom = g.y + (Math.max(...rows) + 1) * g.ch` 夹住。本关派生值：`grid.y 200 + 2×186 = **572**`、`200 + 3×186 = **758**` ⇒ 只出现 572–758 这一条带（中线第三行，`CFG.H 1152` 屏内完全可见）。战前全景与战斗共用同一函数 ⇒ A3 自动成立
+2. **出怪行** [pickRow :451-453](scenes/test.js#L451-L453)：函数开头 `const lv = INFO.tracklist[state.slot]; if (lv.rows) return lv.rows[Math.floor(Math.random() * lv.rows.length)];`，后面的加权逻辑原样保留；`manualSpawn()` 走 `pickRow()` 自动跟随；`rowLast` / `rowSecondLast` 不再更新（本关无副作用，没去清理）
+3. **放置合法性** [rowAllowed :1243-1246](scenes/test.js#L1243-L1246)（无 `rows` 时恒真）+ [canPlant :1248-1250](scenes/test.js#L1248-L1250) 末尾 `&& rowAllowed(cell.row)`；点击放置两处 `if (canPlant(cell))` 未改，靠 `canPlant` 自然拒绝
+4. **悬停预览** [:1735](scenes/test.js#L1735) `if (cell && cell.col < CFG.plantCols && rowAllowed(cell.row))` ⇒ 非 `rows` 行**不画任何框**（绿/红都不画），`rows` 行内按 `canPlant` 画绿/红，占用格仍是红框（他没提，保持现状）
+5. **金牛奶** [resetGmilks :673-677](scenes/test.js#L673-L677)：`const rows = INFO.tracklist[s.slot].rows || Array.from({ length: CFG.rows }, (_, r) => r);` 后 `for (const r of rows) s.gmilks.push(...)` ⇒ 本关只有 row 2 那一个金牛奶，其余四行不绘制、不参与 `gmilkHit`；`gmilkRect` / 绘制 / tick / 选卡位移动画按数组迭代，未动
+- `spawnMilk()` 的随机行 `2 + Math.floor(Math.random() * 3)` **本轮未动**（那是普通掉落牛奶，不是金牛奶）
+
+### §11 `bigShown()` 只关表现
+- 新增 [:581-583](scenes/test.js#L581-L583) `function bigShown() { return INFO.tracklist[state.slot].bigWave !== false; }`；**`isBigWave()` 一个字没改**（[:577](scenes/test.js#L577)），所以末波预算仍 ×2.5、`bigSeed` 补种照旧
+- 三个门点：[:588](scenes/test.js#L588) `bigShown() && isBigWave(state.wave + 1) ? g.bigGap : …`（不再有长间隔）、[:639](scenes/test.js#L639) `if (state.bigWarned || !bigShown() || !isBigWave(state.wave + 1)) return;`（无「一大波敌人正在靠近」）、[:1912](scenes/test.js#L1912) `if (!bigShown() || !isBigWave(w)) continue;`（进度条无全清标识，`rank` 也不自增）
+- `state.wave === lv.waves` 的「最后攻势」红字未加门，照出
+
+### §12 `placeTimes` + `gateOpen`
+- 运行字段 [game.js:155](game.js#L155) `placeTimes: [],`、[:156](game.js#L156) `milkClicked: false,`；[resetRun :771-772](scenes/test.js#L771-L772) `state.placeTimes = []; state.milkClicked = false;`
+- **[save.js:3](save.js#L3)** `SAVE_KEYS` 末尾追加 `'placeTimes', 'milkClicked'` ⇒ **32 → 34 键**；`applyRunText` **没加校验**（不扩大"存档数据无效"检查面）。方向核对过：`progress` 新字段不进 `SAVE_KEYS`、`placeTimes`/`milkClicked` 反过来只进 `SAVE_KEYS`
+- 两处放置路径各加一行（[:2115](scenes/test.js#L2115) 传送带、[:2146](scenes/test.js#L2146) 普通卡槽，紧跟 `state.plants.push({...})`）`state.placeTimes.push(state.clock);`，**只 push 不 pop**（伙伴死亡不回退）
+- 判定函数 [:2182-2186](scenes/test.js#L2182-L2186) `gateOpen(spec)`（`!spec` ⇒ `true`，即无门控的关卡恒开）；两个 AND 点：出怪 [:2194](scenes/test.js#L2194) `… state.clock - state.lastSpawn > state.waveGap && gateOpen(lv.spawnGate)`、自然掉落 [:2202](scenes/test.js#L2202) `… state.clock - state.lastMilk > state.milkInterval && gateOpen(lv.milkGate)`
+- 单位核对：`state.clock` 是**毫秒**（[:2190](scenes/test.js#L2190) `state.clock += dt * 1000`），`waveGap`/`milkInterval`/`firstGap`/`delay` 全 ms；`gateOpen` 用 `>=` ⇒ 语义是"第 2 只放下后 +3000ms 才出第 1 波"、"第 1 只放下后 +3000ms 才第一次自然掉奶"
+
+### §13 提示设施单槽改双槽
+- `state.hint` 拆成 `state.hintRule`（每帧规则位）与 `state.hintEvent`（`null | { text, t, hold }` 事件位）：[makeRun game.js:147-148](game.js#L147-L148) 两个字段、[resetRun :763-764](scenes/test.js#L763-L764) 两个置 `null`，**都不进 `SAVE_KEYS`**（34 键里不含它们）
+- [showHint(text, hold) :552-554](scenes/test.js#L552-L554) 加了时长参数：`state.hintEvent = { text, t: 0, hold: hold === undefined ? null : hold };`（`hold` 单位**秒**，与 `CFG.banner.*Hold` 一致）；[hideHint() :556-558](scenes/test.js#L556-L558) 清 `hintEvent`——**它仍无调用点**（按"保留代码接口"处理，没为它硬造一次按键或调用）
+- tick 在 banners 那一组之后 [:2347-2350](scenes/test.js#L2347-L2350)，写法照说明（`hold === null` 的事件提示只被覆盖或被 `hideHint` 清）；规则位单点赋值 [:2351](scenes/test.js#L2351) `state.hintRule = HINT_RULES[state.slot] ? HINT_RULES[state.slot]() : null;`
+- 绘制：[drawHint(text) :1697-1716](scenes/test.js#L1697-L1716) 参数化文本（其余一行未改），调用处 [:1930-1931](scenes/test.js#L1930-L1931) `const htxt = state.hintEvent ? state.hintEvent.text : state.hintRule; if (htxt) drawHint(htxt);` ⇒ **事件优先、否则规则**，事件结束后常驻规则自动回来。层位与样式**完全沿用 v0.1.95**：`CFG.hint` 未动（`font 80 / lineH 1.5 / barAlpha 0.3 / textAlpha 0.7 / outline 8 / centerY 0.75` ⇒ 条带 120 高、覆盖 804–924、条带宽仍 `CFG.W`），说明 §13 里写的"alpha 0.3 / 字号 140"是上一版之前的旧值，我按当前 CFG 保留、没回退
+- [collectMilk() :32](scenes/test.js#L32) 首行 `state.milkClicked = true;`（该字段进 `SAVE_KEYS` ⇒ 读档后教学阶段不倒退）
+
+### §14 1-1 的九条提示 + 本轮修订
+- [HINT_RULES.test2 :562-565](scenes/test.js#L562-L565) 原样未动（数 `milk` 只数 < 3 出「请至少放置3只咪璐库！」）
+- [HINT_RULES.lv11 :567-575](scenes/test.js#L567-L575) 按 §14 修订写成守卫形：
+```js
+HINT_RULES.lv11 = () => {
+  if (state.placeTimes.length === 0) {
+    if (state.selected !== null) return '点击格子将其放置在空位上！';
+    return '点击伙伴卡片将其选中！';
+  }
+  if (state.placeTimes.length >= 2) return null;
+  if (!state.milkClicked) return state.milkDropped > 0 ? '点击掉落的milk来收集它！' : null;
+  return state.milk >= CARDS[cardBySlotId(1)].info.costmilk ? '太棒了！你收集的milk已经足够召集一个伙伴了！' : '继续收集milk！你需要它来召集更多伙伴！';
+};
+```
+  **提示 1/2 那两个分支整体包进 `state.placeTimes.length === 0` 的守卫**，守卫之外一切不动（阈值仍从 `CARDS[cardBySlotId(1)].info.costmilk` 取 = dxbear 的 100，代码里**无字面量 100**；`milkDropped` 用既有字段，没新增）
+- 四个事件点：3「做的不错！」/ 7「别让中二企鹅到达7sRef！」写在两处 `placeTimes.push` 之后（[:2116-2117](scenes/test.js#L2116-L2117) 传送带、[:2147-2148](scenes/test.js#L2147-L2148) 卡槽，按 `length === 1` / `=== 2` 分流）；8「伙伴需要一段时间才能再次召集！」/ 9「你需要更多的milk才能召集！」在被拒分支（[:2129-2130](scenes/test.js#L2129-L2130) 点击路径、[:2171-2172](scenes/test.js#L2171-L2172) 数字键路径）——**先冷却后牛奶**的顺序就用 `else if (state.cool[si] > 0)` / `else` 表达，两条分支各写一遍，**没抽公共函数**（不顺手重构），时长都直接 `showHint(text, 3)`（不进 CFG）
+- **修订的两条可观察后果（自检逐条验过）**：①**第一只伙伴落地那一刻，提示 1/2 永久退场** ⇒ 之后取消选中回到卡区，规则位返回 `null`，提示条是空的（不再"继续提示 1"）；②提示 3 的 3s 结束后，若 4/5/6 的条件还不成立，**提示条整条消失**，不回落 1/2——这正是"不再触发 1 和 2"的直接后果
+- 与说明 §14 原始代码块的关系：原始链是 `>=2 → null` 在前、`=== 0` 分支在后，修订把 1/2 收进 `=== 0` 守卫后我按"守卫在前"的写法排布；两个条件互斥，**行为等价**（`selected !== null` 仍天然满足"取消选中回到提示 1"，Escape 与再点一次都成立）
+
+### 验证（**144 PASS / 0 FAIL**）
+- 六脚本 `vm.Script` **PARSE OK × 6**（收尾删掉 `HINT_RULES.lv11` 里一行注释后再跑一次，仍 PARSE OK × 6；全仓 `//` 注释行数回到 0）
+- 打桩 `vm` 上下文按 `<script>` 顺序拼接六份真跑，替身 `ctx2d` 录制绘制调用、替身 `localStorage` 承接写盘（注意 `cacheRead/cacheWrite` 会给**所有**键加 `apollo7s:save:` 前缀 ⇒ 全局记录实际落在 `apollo7s:save:apollo7s:progress`）。分 14 组：`progress` 缺省与逐字段回落 + 四个 API；`lv11` 数据行逐字段核 + `test1/test2` 补的三字段；`rewards` 的 `unlock`；解锁面（`usableCards`/`fullDeck`/`needPick`/`deckTarget`/`poolCard`，`usableCards('lv11') = [0]`、`usableCards('test1') = [0..7]`、`fullDeck('lv11') = [0,null×5]`；卡池录制到 **7 张**已解锁卡面（顶栏 HUD 的 6 张按格位排除）、id15 那张连空环都不画）；`rows` 面（`rowAllowed`/`canPlant`/`pickRow` 抽 300 次恒 2、`test1` 仍覆盖五行、`resetGmilks` 1 个 vs 5 个、`drawGrid` 横线集合 `[572, 758]`、竖线夹在 572–758、非 `rows` 行悬停不画框、第 3 行悬停画绿框）；`bigShown` 三点（`randWaveGap < 40000`、`waveWarnCheck` 无预警 banner 且 `bigWarned` 不动、`test2` 照旧 1 条 + 进度条 `Allclear` 标识 **lv11 0 个 / test2 3 个**）；`gateOpen` 时序（`undefined → true`、0/1 只关、第 2 只 +2999ms 关 / +3000ms 开、门控关时 `updateGame` 不出怪、开后只出 row 2）；提示双槽生命周期 + §14 修订（首放后 1/2 退场、事件 3s 到点自动清空、`hold === null` 不被 tick 清）；**真走点击链路**：选卡 → 放置 → `placeTimes` 与 3/7 文案 → 被拒分支 8/9 文案 → 4/5/6 规则；断网四点门控 + `visibleOpts` 三处 + `enterRun` 强制关 `noNatural`/`noCool`；`pickupReward` 三写盘（`cleared` / `cards[2] = true` / `adv.status = 1`）与非首通掉钱袋；存档面（`SAVE_KEYS.length === 34` 且含 `placeTimes`/`milkClicked`、`hintRule`/`hintEvent` 不在快照里、读档回 1-1 后 `placeTimes` 已有 2 项则门控立刻开、不重新等 3s）；菜单入口（未通过 → `enterRun('lv11')`，已通关 → `state.notice` 弹「该内容还未开发」）；回归（test1 传送带、test2 选卡与 `HINT_RULES.test2`、`isBigWave`/`bigSeed`/`spawnWave` 未动）
+- **README 滞后（未改，等你指令）**：README 目前按"两个测试场景"描述，本轮多了 1-1、全局解锁存档（卡片/断网/冒险进度）、选项面板只对测试关开放、出怪门控与九条提示；`:44` 那类素材清单也未提 `rew_cardmilk` 复用 `card_milk.png`。本轮仍不动 README
+- **挂账 / 备注（没自作主张改）**：①1-1 只有 4 波、`bigWave: false` 只关表现 ⇒ **末波仍按 ×2.5 出怪预算**（`spawnMul: 1`、`unit = min(ceil(wave/3), 8)`），强度取决于这两个数 ②`deckSelect: true` 对 1-1 惰性（可用卡 < 6 槽）③`noNatural` / `noCool` 现在跨关强制关，但 `fast` / `autoCollect` 仍会带进 1-1 ④断网**悬浮气泡**未门控（见 §7 那条 ⚠）⑤`hideHint()` 仍无调用点 ⑥`enterRun` 里 `slot.loading = true` 要等 `loadRun` 的 promise 落地才置假
+- **未开浏览器、未合成点击、未截图**（全部结论来自打桩 `vm` 里的录制计数，不比像素）；**未 commit、未 push**
+
+## v0.1.95（2026-10-29）
+- 按你「字体大小改为80；将字体透明度与条分开，条恢复原来的透明度」：**`font` 落到 80 + 把 v0.1.93 §1 定的"唯一 `alpha`"拆成 `barAlpha` / `textAlpha` 两个字段**，改动面 `game.js` 1 行（CFG）+ `scenes/test.js` 1 行（`drawHint` 里多一次赋值、`alpha` 改名），其余代码与数据没动
+- **[game.js:49](game.js#L49)** 现读原文：`hint: { font: 80, lineH: 1.5, barAlpha: 0.3, textAlpha: 0.7, barColor: '#a0a0a0', textColor: '#ffffff', outline: 8, outlineColor: '#000000', centerY: 0.75 },`
+  - `font: 120 → **80**`（上一轮是 140 → 120，本轮直接到你点名的 80；也顺带解决了 v0.1.94 我挂的那个"和催波一样大"的问题——现在提示条比催波横幅**小**了，催波才是全场最大字号）
+  - **`alpha` 这个字段名已经不存在了**，换成 `barAlpha: 0.3`（**恢复** v0.1.93 原本的 30%）+ `textAlpha: 0.7`（上一轮你要的 70% 只留给字）。全仓 `CFG.hint.alpha` / 裸 `h.alpha` 引用**零残留**（`grep` 只剩 [scenes/test.js:1246](scenes/test.js#L1246) 的 `sh.alpha`，那是阴影配置，与本设施无关）
+  - `lineH / barColor / textColor / outline / outlineColor / centerY` 原值未动，`barColor` 依旧不带 alpha 通道（所以现在是"各层各乘各的"，不会出现 0.3×0.7 那种叠乘）
+- **[scenes/test.js:1655 / :1658](scenes/test.js#L1655-L1658)** `drawHint` 内改成**两次** `globalAlpha` 赋值，顺序是"先条带后文字"，全函数仍然只有一对 `ctx.save()/restore()` 包住：
+```js
+  ctx.globalAlpha = h.barAlpha;
+  ctx.fillStyle = h.barColor;
+  ctx.fillRect(0, cy - bh / 2, CFG.W, bh);
+  ctx.globalAlpha = h.textAlpha;
+```
+  描边与白字都在 `textAlpha` 之后 ⇒ **黑描边跟着字走 0.7**（v0.1.93 §1 里描边本来就归在"字"这一层），灰条带单独回到 0.3。函数体内仍 **80 / 120 / 0.3 / 0.7 / 864 / 804 这些字面量零出现**，全部从 `CFG.hint` 取
+- **派生后果**：条带高 = `font * lineH` **180 → 120**；中心仍是 `CFG.H * 0.75 = 864` ⇒ 覆盖 **774–954 → 804–924**，现在**整条完全落在第 4 行（758–944）以内**，不再压到相邻行；文案 `'请至少放置3只咪璐库！'`（10 全角 + 半角 `3`）估宽 **约 1266 → 约 844px**，2048 屏内左右各留约 600px
+- **验证（19 PASS / 0 FAIL）**：六脚本 `vm.Script` **PARSE OK × 6**；`CFG.hint` 从 `game.js` 切出来跑进 `vm` 读回上面那行原文；再把六份按 `<script>` 顺序拼进打桩上下文、**给 `ctx2d` 装了一个录制代理**（记下每次 `fillRect/strokeText/fillText` 那一刻的 `globalAlpha`），实跑 `drawHint()` 拿到 **条带 `fillRect` 时 alpha = 0.3（参数 `0, 804, 2048, 120`）→ `strokeText` 0.7 → `fillText` 0.7**、文字仍居中于 `1024, 864`、`save/restore` 各 1 次、alpha 只设两次；回归：`hint = null` 时 `render()` 全程不抛错且不进 `drawHint`、赋值点照旧每帧重算、`CFG.banner.font` 仍 120 / `fade` 仍 0.4 / `SAVE_KEYS` 仍 32。⚠ 仍然**只做打桩计数与取值，不比像素**（替身 `ctx2d` 不真正光栅化）
+- **README 滞后（未改，等你指令）**：本轮把 `alpha` 换成 `barAlpha` + `textAlpha`，如果 README 里列过提示条字段，名称也该跟着变；本轮仍不动 README
+- **未开浏览器、未合成点击、未截图**；**未 commit、未 push**
+
+## v0.1.94（2026-10-29）
+- 按你「字体调小一些；字体透明度改为70%」：**只改 `CFG.hint` 里两个数**，`game.js` 单文件 +0 行（就地把 v0.1.93 那一行改掉），绘制/赋值/规则代码一行没动
+- **[game.js:49](game.js#L49)**：`font: 140` → **`font: 120`**，`alpha: 0.3` → **`alpha: 0.7`**。`lineH: 1.5`、`barColor`、`textColor`、`outline: 8`、`outlineColor`、`centerY: 0.75` 全部保持原值，"一些"我按 **-14%** 落的
+- **派生后果（数值都从 CFG 现算，代码里没有字面量）**：条带高 = `font * lineH` **210 → 180**；垂直中心仍是 `CFG.H * 0.75 = 864`，所以覆盖区间 **759–969 → 774–954**（第 4 行是 758–944，依旧压在这一行上、只是上下都收了一点）；文案 `'请至少放置3只咪璐库！'` 是 11 个字符（10 个全角 + 半角 `3`），估宽 **约 1470 → 约 1266px**，2048 屏内左右各留约 390px
+- **⚠ 两点要你确认的连带效应（没自作主张改，等你一句话）**：
+  1. **提示条字号现在和催波横幅一样了**——`CFG.banner.font` 是 120（[game.js:48](game.js#L48)），而 v0.1.93 的交付说明 §1 写的是「`font: 140` 明确大于催波横幅的 120」。如果你想保住"提示比催波小一号"的手感，填 **110**（条带高 165）或 **100**（条带高 150）；想保住"大于催波"就填 **130**（条带高 195）。
+  2. **`alpha` 是整条提示的唯一透明度**（条带 + 白字 + 黑描边三层共用一次 `ctx.globalAlpha`，这是 v0.1.93 §1 定的），所以 0.3 → 0.7 之后**灰色条带本身也从"几乎透明的薄雾"变成相当实的一块**，第 4 行会被它盖掉大半。你说的"字体透明度"如果其实只指字，需要把它拆成 `alpha`（条带）+ `textAlpha`（字/描边）两个字段——本轮按严格范围没拆。
+- **验证**：六个脚本 `vm.Script` **PARSE OK × 6**；把 `info.js` + 从 `game.js` 里切出的 `const CFG` 段跑进 `vm` 上下文读回 `CFG.hint`，打印 `{font:120, lineH:1.5, alpha:0.7, barColor:'#a0a0a0', textColor:'#ffffff', outline:8, outlineColor:'#000000', centerY:0.75}`，并核对 `banner.font` 仍 120、`barColor` 依旧不带 alpha 通道（所以不会和 `globalAlpha` 相乘成 0.21）
+- **README 滞后（未改，等你指令）**：同 v0.1.93，本轮仍不动 README
+- **未开浏览器、未合成点击、未截图**；**未 commit、未 push**
+
+## v0.1.93（2026-10-29）
+- 按你的交付说明「关卡内提示条（hint）全局设施 + 测试场景2 用法」：**新增一套全局提示条设施（CFG 字段 + 运行状态 + 两个公共入口 + 每帧规则单点赋值 + 绘制函数与层位），并挂上第一条测试规则**。纯新增，`git diff --stat` = **game.js +2 行 / scenes/test.js +38 行、0 删除**，催波横幅、`renderDeck`、存档、`INFO` 数据一个字节没改
+- **§1 CFG**：[game.js:49](game.js#L49) 紧跟 `banner`（[:48](game.js#L48)）下面、`bgBlur`（[:50](game.js#L50)）上面新增同级一行 `hint: { font: 140, lineH: 1.5, alpha: 0.3, barColor: '#a0a0a0', textColor: '#ffffff', outline: 8, outlineColor: '#000000', centerY: 0.75 },`。`font: 140` 确实大于催波的 120；条带高 = `font * lineH`、垂直中心 = `CFG.H * centerY`，代码里 **140 / 210 / 864 / 759 / 0.3 这些字面量零出现**（自检里对 `drawHint` 函数体正则扫过）；`barColor` 不带 alpha 通道，唯一透明度走 `ctx.globalAlpha`，不会相乘成 0.09
+- **§2 运行状态**：`makeRun` 的 `banners: [],` 旁边加 `hint: null,`（[game.js:142](game.js#L142)）；`resetRun` 的 `state.banners = [],` 旁边加 `state.hint = null;`（[scenes/test.js:742](scenes/test.js#L742)）。**没进 `SAVE_KEYS`**（[save.js:1-4](save.js#L1-L4) 仍是 **32 键**、不含 `hint`），`applyRunText` 也没加校验 ⇒ `snapshotRun()` 的白名单循环天生不会导出它，读档后首帧由规则重算
+- **§3 公共入口**：[scenes/test.js:546-552](scenes/test.js:546-L552) 紧跟 `showBanner`（:542）下面，`showHint(text)` / `hideHint()` 两个全局函数，各自只赋值 `state.hint`。命名统一 **hint**，没碰已被卡片悬浮说明占用的 `drawTip` / `CFG.tip`。**本轮没有给它们任何调用点**（照 §4 约束，规则是唯一赋值来源），属于你要求的"留接口"状态
+- **§4 规则表**：`const HINT_RULES = {};`（[scenes/test.js:554](scenes/test.js#L554)）形状照 `BELT_ADJUST`（:474）——**规则函数每帧返回文本或 `null`，由引擎单点赋值**。调用站点在 battle 更新里 banner tick 那一组之后（[scenes/test.js:2283](scenes/test.js#L2283)，紧跟 `state.banners = state.banners.filter(...)` :2282）：`state.hint = HINT_RULES[state.slot] ? HINT_RULES[state.slot]() : null;`。没加 `stopped` 特判（与 `banners` 一致），没引入第二套一次性提示计时机制
+- **§5/§6 绘制**：`drawHint()`（[scenes/test.js:1650-1668](scenes/test.js#L1650-L1668)）插在 `drawBannerText`（:1619）之后，条带 `x=0` 宽 `CFG.W` 与屏同宽、不圆角不内边距，文字水平居中于 `CFG.W / 2`、垂直居中于条带中心，描边写法照抄 `drawBannerText`，`ctx.save()/restore()` 成对（自检：函数体内各 **1** 次）。层位 [scenes/test.js:1882](scenes/test.js#L1882) `if (state.hint) drawHint();` 落在催波循环（:1877）之后、`if (state.deckPhase === 'count')`（:1883）之前 ⇒ 压在战场与 HUD 之上、催波之后，被 `drawReward`（:1888）/`drawCeremony`（:1889）/冰爆 `flash`（:1891）/`drawMenuPanel`（:1900）盖在下面。纯绘制层：`testHover`、`testClick`、`uiRects()` 全未改
+- **§7 测试规则**：[scenes/test.js:556-559](scenes/test.js#L556-L559) 数 `state.plants` 里 `CARDS[p.card].key === 'milk'` 的只数，`< 3` 出 `'请至少放置3只咪璐库！'` 否则 `null`。目标卡是 **`milk`（`CARDS[1]`，`id: 2`，产奶那张）**，不是 `chibimilk`（`CARDS[6]`，`id: 8`）——自检打印 `[CARDS[1].key, CARDS[1].info.id, CARDS[6].info.id] = milk,2,8`。⚠ 顺带一个只是**观察**、没处理的点：`info.js:29` 和 `:108` 两张卡的 `name` 都写着 `'ちびみるく'`，所以玩家口上的"咪璐库"在数据层是两张卡共用一名，本规则按你指定只认 `id 2`。阈值 3 写死在规则里，没加 CFG 字段、没塞进 `INFO.tracklist`；不判牌组是否携带该卡（你没选也一直挂着 = 预期），没加保护分支
+- **§8 陷阱自查**：没复用 `showBanner`/`drawBannerText`（它们写死 `CFG.H / 2` 且带 `fade`，本设施要的是瞬间出现瞬间消失——自检 `HINT_RULES` 只有 `test2` 一条、赋值点与绘制点各**唯一 1 处**）。文案长度按 `font: 140` 估：`'请至少放置3只咪璐库！'` 是 11 个字符（9 个汉字 + 全角 `！` + 半角 `3`），约合 1470px，2048 屏内左右各留约 290px；更长文案溢出本轮按你确认的**不做处理**
+- **验证（38 项断言、全 PASS / 0 FAIL，真跑进 `vm` 上下文而不是只看文本）**：六个脚本 `vm.Script` **PARSE OK × 6** ⇒ 把 `info/info.js + scenes/menu.js + scenes/test.js + save.js + progress.js + game.js` 按 `<script>` 顺序拼进一个脚本、灌进带 canvas/Audio/Image/localStorage/rAF 打桩的 `vm.createContext` 里 **引擎真启动了**（`document.getElementById('game')` 那类只打桩到"不抛错"，`render()` 走的是替身 `ctx2d`，所以**只做打桩计数、不比像素**）。逐条过：①`CFG.hint` 几何 `bar=210 / cy=864 / 覆盖 759..969` 与 `alpha 单一 0.3` ②`makeRun`/`state` 的 `hint` 初值 `null` ③`showHint`/`hideHint` 赋值与归零、重复同文本无副作用 ④规则本身：0 只/1 只出文本、3 只 `null`、混场时 `chibimilk`+`dxbear` 不计入 ⑤**每帧单点赋值**：test2 战斗帧写入文本 → 补足 3 只当帧归 `null` → 又掉到 2 只当帧重新出现（瞬间出现/消失，无淡入淡出）→ 切到无规则的 test1 每帧赋 `null` 不串台 → 手工塞进 `state.hint` 的残留值在下一帧被覆盖 ⑥绘制门控打桩：`hint` 非空 `drawHint` 1 次、为 `null` 0 次、与催波同帧各 1 次互不干扰；`deckPhase = 'pick'` 时 `render()` 早退 `renderDeck()` ⇒ 提示不画，`'count'` 阶段因 `updateGame` 没跑 `hint` 保持 `null` ⇒ `START!` 照旧（`drawBannerText` 仍 1 次）⑦存档：`snapshotRun` 文本不含 `hint`、`applyRunText` 不回灌、读档后首帧重算 ⑧回归：`CFG.banner` 六个字段仍 `0.4,5,1,120,#ff4a4a,8`、催波过滤式 `fade * 2 + hold` 原文未动、`drawHint` 内 `save/restore` 各 1、`SAVE_KEYS.length === 32`
+- **已知行为（照 §4 说明，不是本轮引入的 bug、没去"修"）**：`loop()` 在 `state.menuOpen / resumeAsk / loading / result` 时跳过 `updateGame` 但照跑 `render()`（[game.js:306-307](game.js#L306-L307)）⇒ 打开菜单时提示条**保持打开前那一帧的文本**；`state.deckPhase` 存在时 `updateGame` 完全不跑、`render()` 对 `in/pick/out` 早退成 `renderDeck()`（[scenes/test.js:1676-1679](scenes/test.js#L1676-L1679)）⇒ 战前全景与选卡阶段不会出提示条
+- **README 滞后（未改，等你指令）**：README 里"关卡内提示/横幅"这类设施清单（若有）尚未包含 `CFG.hint` + `HINT_RULES` 这一层；本轮不动，等你发话
+- **未开浏览器、未合成点击、未截图**；**未 commit、未 push**
+
 ## v0.1.92（2026-10-28）
 - 按你「将场景2的bgm改为 Trick Tear，然后 push」：**改一行数据 + 把素材纳入版本库**，切曲机制一个字没动
 - **改动 [info/info.js:258](info/info.js#L258)**：`bgm: 'sounds/躯樹の墓守.mp3',` → `bgm: 'sounds/Trick Tear.mp3',`（`test2` 这一关的关卡级覆盖字段）。`test1`（[info/info.js:241](info/info.js#L241)）与全局默认 `INFO.bgm`（[:269](info/info.js#L269)）仍是 `sounds/lawnbgm(1).mp3`，两关依旧不同曲

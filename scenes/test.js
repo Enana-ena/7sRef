@@ -29,6 +29,7 @@ function spawnMilk() {
 }
 
 function collectMilk(k) {
+  state.milkClicked = true;
   k.fly = true;
   k.arrived = false;
   k.counted = false;
@@ -120,6 +121,9 @@ function pickupReward() {
   const r = state.reward;
   const rw = INFO.rewards[r.key];
   markCleared(state.slot);
+  if (rw.unlock) unlockCard(rw.unlock);
+  const lvId = INFO.tracklist[state.slot].id;
+  if (lvId !== null) markAdvDone(lvId);
   for (const k of state.milks) if (!k.fly) collectMilk(k);
   if (rw.milk) burstReward(r, rw.milk);
   state.ceremony = { key: r.key, t: 0, sx: r.x, sy: r.y };
@@ -445,6 +449,8 @@ function rowWeight(i) {
 }
 
 function pickRow() {
+  const lv = INFO.tracklist[state.slot];
+  if (lv.rows) return lv.rows[Math.floor(Math.random() * lv.rows.length)];
   const ws = [];
   let total = 0;
   for (let i = 0; i < CFG.rows; i++) {
@@ -543,14 +549,44 @@ function showBanner(text, hold) {
   state.banners.push({ text, hold, t: 0 });
 }
 
+function showHint(text, hold) {
+  if (!INFO.tracklist[state.slot].hintEvents) return;
+  state.hintEvent = { text, t: 0, hold: hold === undefined ? null : hold };
+}
+
+function hideHint() {
+  state.hintEvent = null;
+}
+
+const HINT_RULES = {};
+
+HINT_RULES.test2 = () => {
+  const n = state.plants.filter(p => CARDS[p.card].key === 'milk').length;
+  return n < 3 ? '请至少放置3只咪璐库！' : null;
+};
+
+HINT_RULES.lv11 = () => {
+  if (state.placeTimes.length === 0) {
+    if (state.selected !== null) return '点击格子将其放置在空位上！';
+    return '点击伙伴卡片将其选中！';
+  }
+  if (state.placeTimes.length >= 2) return null;
+  if (!state.milkClicked) return state.milkDropped > 0 ? '点击掉落的milk来收集它！' : null;
+  return state.milk >= CARDS[cardBySlotId(1)].info.costmilk ? '太棒了！你收集的milk已经足够召集一个伙伴了！' : '继续收集milk！你需要它来召集更多伙伴！';
+};
+
 function isBigWave(w) {
   return w % CFG.wave.bigEvery === 0 || w === INFO.tracklist[state.slot].waves;
+}
+
+function bigShown() {
+  return INFO.tracklist[state.slot].bigWave !== false;
 }
 
 function randWaveGap() {
   const g = CFG.wave;
   if (state.wave === 0) return levelFirstGap(state.slot);
-  return isBigWave(state.wave + 1) ? g.bigGap : g.gapMin + Math.random() * (g.gapMax - g.gapMin);
+  return bigShown() && isBigWave(state.wave + 1) ? g.bigGap : g.gapMin + Math.random() * (g.gapMax - g.gapMin);
 }
 
 function spawnWave() {
@@ -591,7 +627,7 @@ function cutWaveGap(gap) {
 }
 
 function waveCutCheck() {
-  if (isBigWave(state.wave + 1)) {
+  if (bigShown() && isBigWave(state.wave + 1)) {
     if (state.monsters.length === 0) cutWaveGap(CFG.wave.bigCutGap);
     return;
   }
@@ -601,7 +637,7 @@ function waveCutCheck() {
 }
 
 function waveWarnCheck() {
-  if (state.bigWarned || !isBigWave(state.wave + 1)) return;
+  if (state.bigWarned || !bigShown() || !isBigWave(state.wave + 1)) return;
   if (state.waveGap - (state.clock - state.lastSpawn) > CFG.wave.bigWarnGap) return;
   state.bigWarned = true;
   showBanner('一大波敌人正在靠近', CFG.banner.bigHold);
@@ -637,7 +673,8 @@ function gmilkRestX() {
 
 function resetGmilks(s) {
   s.gmilks = [];
-  for (let r = 0; r < CFG.rows; r++) s.gmilks.push({ row: r, x: gmilkRestX(), launched: false });
+  const rows = INFO.tracklist[s.slot].rows || Array.from({ length: CFG.rows }, (_, r) => r);
+  for (const r of rows) s.gmilks.push({ row: r, x: gmilkRestX(), launched: false });
 }
 
 function gmilkRect(b) {
@@ -724,12 +761,16 @@ function resetRun() {
   state.waveHp = 0;
   state.bigWarned = false;
   state.banners = [];
+  state.hintRule = null;
+  state.hintEvent = null;
   state.result = null;
   state.rowLast = Array(CFG.rows).fill(CFG.wave.rowInit);
   state.rowSecondLast = Array(CFG.rows).fill(CFG.wave.rowInit);
   state.lastSpawn = 0;
   state.lastMilk = 0;
   state.milkDropped = 0;
+  state.placeTimes = [];
+  state.milkClicked = false;
   state.milkInterval = randMilkInterval();
   resetGmilks(state);
   state.selected = null;
@@ -742,9 +783,17 @@ function coolStart(info) {
   return info.cd === 'slow' || info.cd === 'very slow' ? INFO.cdTiers[info.cd] * INFO.cdFirst : 0;
 }
 
+function usableCards(k) {
+  const lv = INFO.tracklist[k === undefined ? state.slot : k];
+  const out = [];
+  for (let i = 0; i < CARDS.length; i++) if (lv.test === true || isCardUnlocked(CARDS[i].info.id)) out.push(i);
+  return out;
+}
+
 function fullDeck(k) {
   const d = [];
-  for (let i = 0; i < slotCount(k); i++) d.push(i < CARDS.length ? i : null);
+  const u = usableCards(k);
+  for (let i = 0; i < slotCount(k); i++) d.push(i < u.length ? u[i] : null);
   return d;
 }
 
@@ -757,7 +806,7 @@ function deckCool(d) {
 }
 
 function deckTarget() {
-  return Math.min(slotCount(), CARDS.length);
+  return Math.min(slotCount(), usableCards().length);
 }
 
 function deckPicked() {
@@ -838,7 +887,7 @@ function buildLineup() {
 
 function needPick() {
   if (isConveyor()) return false;
-  return INFO.tracklist[state.slot].deckSelect !== false && slotCount() < CARDS.length;
+  return INFO.tracklist[state.slot].deckSelect !== false && slotCount() < usableCards().length;
 }
 
 function beginRun() {
@@ -850,6 +899,7 @@ function beginRun() {
 }
 
 function beginDeck(pick) {
+  playPickMusic();
   state.deck = (pick || isConveyor()) ? emptyDeck() : fullDeck();
   state.cool = deckCool(state.deck);
   state.lineup = buildLineup();
@@ -900,6 +950,7 @@ function updateDeck(raw) {
       resetGmilks(state);
       state.deckPhase = null;
       state.deckT = 0;
+      stopPickMusic();
       playBgm();
     }
   }
@@ -936,8 +987,10 @@ function cardBySlotId(id) {
 
 function poolCard(ui, pt) {
   const q = CFG.deck.pool;
+  const u = usableCards();
   for (let i = 0; i < q.rows * q.cols; i++) {
     const ci = cardBySlotId(i + 1);
+    if (ci >= 0 && !u.includes(ci)) continue;
     if (ci >= 0 && inRect(pt, ui.pool(i))) return ci;
   }
   return -1;
@@ -1037,9 +1090,10 @@ function drawMenuPanel(ui) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText('选项设置', ui.panel.x + ui.panel.w / 2, ui.panel.y + 70);
-  for (let i = 0; i < OPTS.length; i++) {
+  const vo = visibleOpts();
+  for (let i = 0; i < vo.length; i++) {
     const r = ui.optRow(i);
-    const on = state.opts[OPTS[i].key];
+    const on = state.opts[vo[i].key];
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 3;
     ctx.strokeRect(r.x, r.y + 10, 40, 40);
@@ -1053,7 +1107,7 @@ function drawMenuPanel(ui) {
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 36px sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(OPTS[i].label, r.x + 56, r.y + 30);
+    ctx.fillText(vo[i].label, r.x + 56, r.y + 30);
   }
   drawButton(ui.menuBtn, '菜单');
   ctx.lineWidth = 1;
@@ -1102,9 +1156,11 @@ function renderDeck() {
   drawPanel(ui.panel);
 
   const q = CFG.deck.pool;
+  const usable = usableCards();
   for (let i = 0; i < q.rows * q.cols; i++) {
     const r = ui.pool(i);
     const ci = cardBySlotId(i + 1);
+    if (ci >= 0 && !usable.includes(ci)) continue;
     if (ci < 0) {
       drawEmptySlot(r);
       continue;
@@ -1187,8 +1243,13 @@ function plantAtPoint(x, y) {
   return -1;
 }
 
+function rowAllowed(row) {
+  const rows = INFO.tracklist[state.slot].rows;
+  return !rows || rows.includes(row);
+}
+
 function canPlant(cell) {
-  return !!cell && cell.col < CFG.plantCols && !plantAt(cell.row, cell.col);
+  return !!cell && cell.col < CFG.plantCols && !plantAt(cell.row, cell.col) && rowAllowed(cell.row);
 }
 
 function plantSize(img, scale) {
@@ -1469,18 +1530,22 @@ function drawFieldBg(camX) {
 }
 
 function drawGrid(g) {
+  const rows = INFO.tracklist[state.slot].rows;
   ctx.strokeStyle = 'rgba(0,0,0,0.20)';
   ctx.lineWidth = 1;
   for (let r = 0; r <= CFG.rows; r++) {
+    if (rows && !rows.includes(r) && !rows.includes(r - 1)) continue;
     ctx.beginPath();
     ctx.moveTo(g.x, g.y + r * g.ch);
     ctx.lineTo(g.x + CFG.plantCols * g.cw, g.y + r * g.ch);
     ctx.stroke();
   }
+  const top = rows ? g.y + Math.min(...rows) * g.ch : g.y;
+  const bottom = rows ? g.y + (Math.max(...rows) + 1) * g.ch : g.y + CFG.rows * g.ch;
   for (let c = 0; c <= CFG.plantCols; c++) {
     ctx.beginPath();
-    ctx.moveTo(g.x + c * g.cw, g.y);
-    ctx.lineTo(g.x + c * g.cw, g.y + CFG.rows * g.ch);
+    ctx.moveTo(g.x + c * g.cw, top);
+    ctx.lineTo(g.x + c * g.cw, bottom);
     ctx.stroke();
   }
 }
@@ -1592,6 +1657,7 @@ function drawBelt() {
 
 function drawTopHud(pick) {
   if (isConveyor()) drawBelt(); else drawCardHud(pick);
+  if (!netUnlocked()) return;
   const ns = netRect();
   ctx.fillStyle = 'rgba(70,50,25,0.65)';
   roundRect(ns.x - 16, ns.y - 12, ns.w + 32, ns.h + 24, 20);
@@ -1631,6 +1697,27 @@ function drawBannerText(text, a) {
   ctx.restore();
 }
 
+function drawHint(text) {
+  const h = CFG.hint;
+  const bh = h.font * h.lineH;
+  const cy = CFG.H * h.centerY;
+  ctx.save();
+  ctx.globalAlpha = h.barAlpha;
+  ctx.fillStyle = h.barColor;
+  ctx.fillRect(0, cy - bh / 2, CFG.W, bh);
+  ctx.globalAlpha = h.textAlpha;
+  ctx.font = 'bold ' + h.font + 'px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = h.outline;
+  ctx.strokeStyle = h.outlineColor;
+  ctx.fillStyle = h.textColor;
+  ctx.strokeText(text, CFG.W / 2, cy);
+  ctx.fillText(text, CFG.W / 2, cy);
+  ctx.restore();
+}
+
 function drawMeterIcon(im, ic, x, y) {
   const s = ic.h / ic.src[1];
   ctx.drawImage(im, x - ic.pivot[0] * s, y - ic.pivot[1] * s, ic.src[0] * s, ic.h);
@@ -1648,7 +1735,7 @@ function render() {
   const held = heldCard();
   if (held) {
     const cell = cellAt(state.mouse.x, state.mouse.y);
-    if (cell && cell.col < CFG.plantCols) {
+    if (cell && cell.col < CFG.plantCols && rowAllowed(cell.row)) {
       ctx.fillStyle = canPlant(cell) ? 'rgba(80,255,120,0.30)' : 'rgba(255,70,70,0.30)';
       ctx.fillRect(g.x + cell.col * g.cw, g.y + cell.row * g.ch, g.cw, g.ch);
     }
@@ -1825,7 +1912,7 @@ function render() {
       const total = INFO.tracklist[state.slot].waves;
       let rank = 0;
       for (let w = total; w >= 1; w--) {
-        if (!isBigWave(w)) continue;
+        if (!bigShown() || !isBigWave(w)) continue;
         const k = w < state.wave ? 1 : w === state.wave ? u : 0;
         drawMeterIcon(imgs['allclear_' + mt.ranks[Math.min(rank++, mt.ranks.length - 1)]], mt.mark, fx + fw * (1 - w / total), cy + mt.mark.dy + (mt.mark.dyDone - mt.mark.dy) * k);
       }
@@ -1843,6 +1930,8 @@ function render() {
     const a = b.t < f ? b.t / f : (b.t < f + b.hold ? 1 : Math.max(0, 1 - (b.t - f - b.hold) / f));
     drawBannerText(b.text, a);
   }
+  const htxt = state.hintEvent ? state.hintEvent.text : state.hintRule;
+  if (htxt) drawHint(htxt);
   if (state.deckPhase === 'count') {
     const mark = deckMark(state.deckT);
     if (mark) drawBannerText(mark, 1);
@@ -1904,7 +1993,7 @@ function testHover() {
   }
   const ui = uiRects();
   let ptr = slotAt(state.mouse.x, state.mouse.y) >= 0 || inRect(state.mouse, ui.menuBtn) || inRect(state.mouse, netRect()) || beltItemAt(state.mouse.x, state.mouse.y) >= 0 || milkAt(state.mouse.x, state.mouse.y) >= 0 || rewardHit(state.mouse);
-  if (state.menuOpen) ptr = inRect(state.mouse, ui.menuBtn) || inRect(state.mouse, ui.resumeBtn) || inRect(state.mouse, ui.restartBtn) || inRect(state.mouse, ui.quitBtn) || OPTS.some((o, i) => inRect(state.mouse, ui.optRow(i)));
+  if (state.menuOpen) ptr = inRect(state.mouse, ui.menuBtn) || inRect(state.mouse, ui.resumeBtn) || inRect(state.mouse, ui.restartBtn) || inRect(state.mouse, ui.quitBtn) || visibleOpts().some((o, i) => inRect(state.mouse, ui.optRow(i)));
   if (state.confirmRestart) ptr = inRect(state.mouse, ui.confirmYes) || inRect(state.mouse, ui.confirmNo);
   if (state.resumeAsk) ptr = inRect(state.mouse, ui.resumeBack) || inRect(state.mouse, ui.resumeRestart) || inRect(state.mouse, ui.resumeGo);
   if (state.result) ptr = inRect(state.mouse, ui.loseBack) || inRect(state.mouse, ui.loseRetry);
@@ -1981,9 +2070,10 @@ function testClick(p) {
       setMenu(false);
       return;
     }
-    for (let i = 0; i < OPTS.length; i++) {
+    const vo = visibleOpts();
+    for (let i = 0; i < vo.length; i++) {
       if (!inRect(p, ui.optRow(i))) continue;
-      const key = OPTS[i].key;
+      const key = vo[i].key;
       state.opts[key] = !state.opts[key];
       if (key === 'autoCollect' && state.opts[key]) {
         for (const k of state.milks) if (!k.fly) collectMilk(k);
@@ -2006,7 +2096,7 @@ function testClick(p) {
     collectMilk(state.milks[mi]);
     return;
   }
-  if (inRect(p, netRect())) {
+  if (netUnlocked() && inRect(p, netRect())) {
     state.net = !state.net;
     state.selected = null;
     state.beltSel = -1;
@@ -2025,6 +2115,9 @@ function testClick(p) {
       const ci = cardBySlotId(state.belt[state.beltSel].id);
       const info = CARDS[ci].info;
       state.plants.push({ row: cell.row, col: cell.col, card: ci, atkT: info.bullet ? randAtk(info) : 0, prodT: info.produce ? randRange(info.produce.firstMin, info.produce.firstMax) : 0, lifeT: info.life || 0, placeT: 0, armT: 0, hitT: 0, hp: info.hp });
+      state.placeTimes.push(state.clock);
+      if (state.placeTimes.length === 1) showHint('做的不错！', 3);
+      else if (state.placeTimes.length === 2) showHint('别让中二企鹅到达7sRef！', 3);
       state.belt.splice(state.beltSel, 1);
       state.beltSel = -1;
     }
@@ -2036,7 +2129,8 @@ function testClick(p) {
     if (state.opts.noCool || (state.milk >= info.costmilk && state.cool[si] <= 0)) {
       state.selected = state.selected === si ? null : si;
       state.net = false;
-    }
+    } else if (state.cool[si] > 0) showHint('伙伴需要一段时间才能再次召集！', 3);
+    else showHint('你需要更多的milk才能召集！', 3);
     return;
   }
   if (state.selected === null) return;
@@ -2052,6 +2146,9 @@ function testClick(p) {
       }
     }
     state.plants.push({ row: cell.row, col: cell.col, card: state.deck[state.selected], atkT: info.bullet ? randAtk(info) : 0, prodT: info.produce ? randRange(info.produce.firstMin, info.produce.firstMax) : 0, lifeT: info.life || 0, placeT: 0, armT: 0, hitT: 0, hp: info.hp });
+    state.placeTimes.push(state.clock);
+    if (state.placeTimes.length === 1) showHint('做的不错！', 3);
+    else if (state.placeTimes.length === 2) showHint('别让中二企鹅到达7sRef！', 3);
     if (!state.opts.noCool) state.cool[state.selected] = INFO.cdTiers[info.cd];
     state.selected = null;
   }
@@ -2074,14 +2171,21 @@ function testKey(e) {
     if (state.opts.noCool || (state.milk >= info.costmilk && state.cool[si] <= 0)) {
       state.selected = state.selected === si ? null : si;
       state.net = false;
-    }
+    } else if (state.cool[si] > 0) showHint('伙伴需要一段时间才能再次召集！', 3);
+    else showHint('你需要更多的milk才能召集！', 3);
     return;
   }
-  if (e.key === '`') {
+  if (e.key === '`' && netUnlocked()) {
     state.net = !state.net;
     state.selected = null;
     state.beltSel = -1;
   }
+}
+
+function gateOpen(spec) {
+  if (!spec) return true;
+  const at = state.placeTimes[spec.plants - 1];
+  return at !== undefined && state.clock >= at + spec.delay;
 }
 
 function updateGame(raw) {
@@ -2090,7 +2194,7 @@ function updateGame(raw) {
   state.bgmAt = bgm.currentTime;
   const lv = INFO.tracklist[state.slot];
   const stopped = !!(state.reward || state.ceremony);
-  if (!state.opts.noNatural && state.wave < lv.waves && state.clock - state.lastSpawn > state.waveGap) {
+  if (!state.opts.noNatural && state.wave < lv.waves && state.clock - state.lastSpawn > state.waveGap && gateOpen(lv.spawnGate)) {
     state.lastSpawn = state.clock;
     state.wave++;
     state.waveGap = randWaveGap();
@@ -2098,7 +2202,7 @@ function updateGame(raw) {
     spawnWave();
   }
   if (!stopped && isConveyor()) updateBelt(dt);
-  if (!stopped && !isConveyor() && state.clock - state.lastMilk > state.milkInterval) {
+  if (!stopped && !isConveyor() && state.clock - state.lastMilk > state.milkInterval && gateOpen(lv.milkGate)) {
     state.lastMilk = state.clock;
     state.milkInterval = randMilkInterval();
     spawnMilk();
@@ -2243,6 +2347,11 @@ function updateGame(raw) {
   }
   for (const b of state.banners) b.t += dt;
   state.banners = state.banners.filter(b => b.t < CFG.banner.fade * 2 + b.hold);
+  if (state.hintEvent && state.hintEvent.hold !== null) {
+    state.hintEvent.t += dt;
+    if (state.hintEvent.t >= state.hintEvent.hold) state.hintEvent = null;
+  }
+  state.hintRule = HINT_RULES[state.slot] ? HINT_RULES[state.slot]() : null;
 
   const viewX = CFG.grid.x + CFG.visibleCols * CFG.grid.cw;
   for (const p of state.plants) {

@@ -1,6 +1,6 @@
 const SAVE_KEYS = ['clock', 'wave', 'waveGap', 'waveHp', 'bigWarned', 'banners', 'rowLast', 'rowSecondLast', 'lastSpawn', 'lastMilk', 'milkInterval', 'milkDropped', 'milk', 'milkShown',
   'deck', 'cool', 'plants', 'bullets', 'milks', 'effects', 'gmilks', 'bgmAt', 'reward',
-  'belt', 'beltT', 'beltLast', 'beltLayers', 'beltPresetAt', 'beltSel', 'beltScroll', 'deaths', 'ashes'];
+  'belt', 'beltT', 'beltLast', 'beltLayers', 'beltPresetAt', 'beltSel', 'beltScroll', 'deaths', 'ashes', 'placeTimes', 'milkClicked'];
 
 const LS_PREFIX = 'apollo7s:save:';
 
@@ -19,6 +19,21 @@ function cacheWrite(key, text) {
   } catch (e) {
     console.warn('浏览器缓存写入失败 ' + key, e);
   }
+}
+
+function cacheErase(key) {
+  try {
+    localStorage.removeItem(LS_PREFIX + key);
+  } catch (e) {
+    console.warn('浏览器缓存清除失败 ' + key, e);
+  }
+}
+
+function clearSaves() {
+  for (const key of Object.keys(SLOTS)) cacheErase(key);
+  cacheErase(PROGRESS_KEY);
+  initProgress();
+  for (const key of Object.keys(SLOTS)) Object.assign(SLOTS[key], makeRun(key));
 }
 
 function snapshotRun(s) {

@@ -46,6 +46,8 @@ const CFG = {
   deck: { cam: 1400, hold: 1.5, panIn: 1.5, settle: 1, panOut: 1.5, rise: 0.3, fly: 0.18, shift: 0.12, minShow: 5, showPad: 150, showGap: 230, count: 5, milkAt: 1, milkStep: 0.1, milkPan: 0.1, marks: [['3', 2.5, 0.5], ['2', 3, 0.5], ['1', 3.5, 0.5], ['START!', 4, 1]], panel: { x: 40, y: 240, w: 760 }, pool: { rows: 6, cols: 8, w: 76, h: 122, gapX: 12, gapY: 8 } },
   gmilk: { scale: 0.8, speed: 800 },
   banner: { font: 120, color: '#ff4a4a', fade: 0.4, bigHold: 5, lastHold: 1, outline: 8, outlineColor: '#000' },
+  pickMusic: { src: 'sounds/Choose Your Seeds.mp3', loopAt: 18 },
+  hint: { font: 80, lineH: 1.5, barAlpha: 0.3, textAlpha: 0.7, barColor: '#a0a0a0', textColor: '#ffffff', outline: 8, outlineColor: '#000000', centerY: 0.75 },
   bgBlur: 12,
 };
 CFG.grid.x = CFG.W - CFG.visibleCols * CFG.grid.cw;
@@ -60,6 +62,11 @@ const OPTS = [
   { key: 'noCool', label: '无冷却无花费' },
   { key: 'autoCollect', label: '自动收集' },
 ];
+
+function visibleOpts() {
+  const lv = INFO.tracklist[state.slot];
+  return lv.test === true ? OPTS : OPTS.filter(o => o.key !== 'noNatural' && o.key !== 'noCool');
+}
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -95,6 +102,7 @@ function makeRun(key) {
     slot: key,
     scene: 'menu',
     notice: false,
+    clearAsk: false,
     mouse: { x: -200, y: -200 },
     selected: null,
     net: false,
@@ -138,23 +146,44 @@ function makeRun(key) {
     waveHp: 0,
     bigWarned: false,
     banners: [],
+    hintRule: null,
+    hintEvent: null,
     rowLast: Array(CFG.rows).fill(CFG.wave.rowInit),
     rowSecondLast: Array(CFG.rows).fill(CFG.wave.rowInit),
     lastSpawn: 0,
     lastMilk: 0,
     milkInterval: 0,
     milkDropped: 0,
+    placeTimes: [],
+    milkClicked: false,
     bgmAt: 0,
   };
 }
 
-const SLOTS = { test1: makeRun('test1'), test2: makeRun('test2') };
+const SLOTS = { test1: makeRun('test1'), test2: makeRun('test2'), lv11: makeRun('lv11') };
 
 let state = SLOTS.test1;
 
-const bgm = new Audio(INFO.bgm);
-bgm.loop = true;
-let bgmSrc = INFO.bgm;
+const MUSIC = {};
+
+function musicFor(src) {
+  const m = MUSIC[src];
+  if (m) return m;
+  const a = new Audio();
+  a.preload = 'auto';
+  a.loop = true;
+  a.src = src;
+  MUSIC[src] = a;
+  return a;
+}
+
+function seekMusic(m, at) {
+  if (at <= 0) return;
+  if (m.readyState >= 1) m.currentTime = at;
+  else m.addEventListener('loadedmetadata', () => { m.currentTime = at; }, { once: true });
+}
+
+let bgm = musicFor(INFO.bgm);
 
 const winMusic = new Audio(CFG.reward.winMusic);
 
@@ -167,6 +196,18 @@ function playWinMusic() {
   winMusic.currentTime = 0;
   const p = winMusic.play();
   if (p && p.catch) p.catch(() => {});
+}
+
+const pickBgm = musicFor(CFG.pickMusic.src);
+
+function playPickMusic() {
+  pickBgm.currentTime = 0;
+  const p = pickBgm.play();
+  if (p && p.catch) p.catch(() => {});
+}
+
+function stopPickMusic() {
+  pickBgm.pause();
 }
 
 function setMenu(open) {
@@ -182,16 +223,13 @@ function enterRun(key) {
   state = slot;
   slot.mouse = mouse;
   slot.scene = 'game';
+  if (INFO.tracklist[key].test !== true) { slot.opts.noNatural = false; slot.opts.noCool = false; }
   slot.ceremony = null;
   slot.loading = true;
   loadRun(key).then(() => {
     slot.loading = false;
-    const src = levelBgm(key);
-    if (src !== bgmSrc) {
-      bgmSrc = src;
-      bgm.src = src;
-    }
-    bgm.currentTime = slot.bgmAt;
+    bgm = musicFor(levelBgm(key));
+    seekMusic(bgm, slot.bgmAt);
     if (hasRunRecord(slot)) {
       slot.resumeAsk = true;
       return;
@@ -288,6 +326,9 @@ window.addEventListener('keydown', e => {
 let prev = performance.now();
 
 function loop(t) {
+  if (!pickBgm.paused && pickBgm.currentTime >= CFG.pickMusic.loopAt) pickBgm.currentTime = pickBgm.currentTime % CFG.pickMusic.loopAt;
+  const bl = INFO.tracklist[state.slot].bgmLoop;
+  if (bl && !bgm.paused && bgm.currentTime >= bl.at) bgm.currentTime = bl.to;
   const raw = Math.min(50, t - prev) / 1000;
   prev = t;
   if (state.scene === 'menu') {
