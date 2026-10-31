@@ -1,0 +1,5 @@
+# 仓库只发布 README，其余 markdown 留在本地
+/00_MASTER_PROMPT.md
+/01_FIRST_PLAYABLE.md
+/update.md
+/update_7sRef.md
