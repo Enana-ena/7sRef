@@ -19,8 +19,7 @@ function menuRects() {
     panel,
     notice,
     start: { x: panel.x + (panel.w - 320) / 2, y: panel.y + 120, w: 320, h: 64 },
-    test1: { x: panel.x + (panel.w - 320) / 2, y: panel.y + 230, w: 320, h: 64 },
-    test2: { x: panel.x + (panel.w - 320) / 2, y: panel.y + 340, w: 320, h: 64 },
+    testList: { x: panel.x + (panel.w - 320) / 2, y: panel.y + 230, w: 320, h: 64 },
     back: { x: notice.x + (notice.w - 320) / 2, y: notice.y + 150, w: 320, h: 64 },
     askYes: { x: notice.x + 60, y: notice.y + 150, w: 240, h: 64 },
     askNo: { x: notice.x + 340, y: notice.y + 150, w: 240, h: 64 },
@@ -35,7 +34,7 @@ function menuHover() {
   const ptr = inRect(state.mouse, m.importBtn) || inRect(state.mouse, m.exportBtn) || inRect(state.mouse, m.clearBtn) ||
     (state.clearAsk ? inRect(state.mouse, m.askYes) || inRect(state.mouse, m.askNo)
       : state.notice ? inRect(state.mouse, m.back)
-        : inRect(state.mouse, m.start) || inRect(state.mouse, m.test1) || inRect(state.mouse, m.test2));
+        : inRect(state.mouse, m.start) || inRect(state.mouse, m.testList));
   canvas.style.cursor = ptr ? 'pointer' : 'default';
 }
 
@@ -69,8 +68,7 @@ function menuClick(p) {
   if (inRect(p, m.start)) {
     const k = advKey();
     if (k) enterRun(k); else state.notice = true;
-  } else if (inRect(p, m.test1)) enterRun('test1');
-  else if (inRect(p, m.test2)) enterRun('test2');
+  } else if (inRect(p, m.testList)) state.scene = 'testlist';
 }
 
 function renderMenu() {
@@ -103,6 +101,5 @@ function renderMenu() {
   ctx.font = 'bold 64px sans-serif';
   ctx.fillText('主菜单', m.panel.x + m.panel.w / 2, m.panel.y + 60);
   drawButton(m.start, '开始游戏');
-  drawButton(m.test1, '测试场景1');
-  drawButton(m.test2, '测试场景2');
+  drawButton(m.testList, '测试关卡');
 }

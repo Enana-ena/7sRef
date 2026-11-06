@@ -83,7 +83,11 @@ function stepArc(o, dt) {
 }
 
 function rewardSize(key) {
-  const h = CFG.milk.size * INFO.rewards[key].scale;
+  const rw = INFO.rewards[key];
+  if (rw.unlock) {
+    return { w: CFG.cardSlot.w * rw.scale, h: CFG.cardSlot.h * rw.scale };
+  }
+  const h = CFG.milk.size * rw.scale;
   const img = imgs['rew_' + key];
   return { w: h * img.width / img.height, h };
 }
@@ -573,6 +577,13 @@ HINT_RULES.lv11 = () => {
   if (state.placeTimes.length >= 2) return null;
   if (!state.milkClicked) return state.milkDropped > 0 ? '点击掉落的milk来收集它！' : null;
   return state.milk >= CARDS[cardBySlotId(1)].info.costmilk ? '太棒了！你收集的milk已经足够召集一个伙伴了！' : '继续收集milk！你需要它来召集更多伙伴！';
+};
+
+HINT_RULES.lv12 = () => {
+  const n = state.plants.filter(p => CARDS[p.card].key === 'milk').length;
+  if (n === 0) return '咪璐库是极其重要的伙伴！她可以为你提供更多的milk！';
+  if (n < 3) return '试着放置至少3只咪璐库！';
+  return null;
 };
 
 function isBigWave(w) {
@@ -1466,6 +1477,20 @@ function drawDrop(f) {
   ctx.globalAlpha = 1;
 }
 
+function drawRewardFace(cx, cy, key, zoom) {
+  const rw = INFO.rewards[key];
+  const s = rewardSize(key);
+  if (!rw.unlock) {
+    ctx.drawImage(imgs['rew_' + key], cx - s.w * zoom / 2, cy - s.h * zoom / 2, s.w * zoom, s.h * zoom);
+    return;
+  }
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(zoom, zoom);
+  drawCardFace({ x: -s.w / 2, y: -s.h / 2, w: s.w, h: s.h }, CARDS_BY_ID[rw.unlock]);
+  ctx.restore();
+}
+
 function drawReward() {
   const r = state.reward;
   const hl = CFG.reward.halo;
@@ -1478,7 +1503,7 @@ function drawReward() {
   ctx.beginPath();
   ctx.arc(r.x, r.y, rad, 0, Math.PI * 2);
   ctx.fill();
-  ctx.drawImage(imgs['rew_' + r.key], r.x - s.w / 2, r.y - s.h / 2, s.w, s.h);
+  drawRewardFace(r.x, r.y, r.key, 1);
 }
 
 function drawCeremony() {
@@ -1489,9 +1514,6 @@ function drawCeremony() {
   const x = c.sx + (CFG.W / 2 - c.sx) * k;
   const y = c.sy + (CFG.H / 2 - c.sy) * k;
   const sc = 1 + (ce.scaleTo - 1) * u;
-  const s = rewardSize(c.key);
-  const w = s.w * sc;
-  const h = s.h * sc;
   const rad = ce.glowFrom + (ce.glowTo - ce.glowFrom) * u;
   const gr = ctx.createRadialGradient(x, y, 0, x, y, rad);
   gr.addColorStop(0, 'rgba(' + ce.color + ',' + ce.glowAlpha + ')');
@@ -1500,7 +1522,7 @@ function drawCeremony() {
   ctx.beginPath();
   ctx.arc(x, y, rad, 0, Math.PI * 2);
   ctx.fill();
-  ctx.drawImage(imgs['rew_' + c.key], x - w / 2, y - h / 2, w, h);
+  drawRewardFace(x, y, c.key, sc);
   const white = Math.max(0, Math.min(1, (c.t - (ce.dur - ce.white)) / ce.white));
   if (white > 0) {
     ctx.fillStyle = 'rgba(255,255,255,' + white + ')';

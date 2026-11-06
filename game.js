@@ -23,7 +23,7 @@ const CFG = {
   levelName: { font: 26, color: '#ffe14d', padX: 24, padY: 12 },
   meter: { w: 260, padX: 24, padY: 12, gap: 16, anim: 0.6, frame: [2, 2, 155, 19], fill: [7, 33, 143, 11], inset: [5, 4], sync: { h: 47, src: [80, 80], pivot: [39.5, 39.5], dy: 0 }, mark: { h: 64, src: [112, 140], pivot: [55.5, 78], dy: -6, dyDone: -30 }, ranks: ['SSSp', 'SSS', 'SSp', 'SS', 'Sp', 'S'] },
   tip: { font: 26, lineH: 34, padX: 16, padY: 8, r: 10, bg: 'rgba(0,0,0,0.78)', border: 'rgba(255,255,255,0.35)' },
-  wave: { div: 3, cap: 8, bigEvery: 10, bigMul: 2.5, bigSeed: 'chunipenguin', first: 19000, gapMin: 25000, gapMax: 31000, bigGap: 52000, hpCut: 0.65, armor1Weight: 1.00, armor2Weight: 0.20, cutGap: 3000, bigCutGap: 9000, bigWarnGap: 7000, rowInit: 0 },
+  wave: { div: 3, cap: 8, bigEvery: 10, bigMul: 2.5, bigSeed: 'chunipenguin', first: 18000, gapMin: 25000, gapMax: 31000, bigGap: 52000, hpCut: 0.65, armor1Weight: 1.00, armor2Weight: 0.20, cutGap: 3000, bigCutGap: 9000, bigWarnGap: 7000, rowInit: 0 },
   monster: { bleedGap: 0.033, bleedDmg: 1, slow: 0.5, slowColor: '#3a5c7a', slowAlpha: 0.55, feet: 81, hitFlash: 0.05, hitAlpha: 0.2, hitColor: '#ffffff', death: { fall: 0.3, hold: 0.5, fade: 0.3, angle: 90, slide: 40 }, ash: { dur: 2.5, color: '#000000' }, freezeResist: 0.75, freezeTrap: { img: 'images/others/icetrap.png', scale: 1.5, dy: 0 } },
   armor: { death: { fall: 0.15, hold: 0.5, fade: 0.3, run: 90, push: 0.45 } },
   reward: {
@@ -160,7 +160,7 @@ function makeRun(key) {
   };
 }
 
-const SLOTS = { test1: makeRun('test1'), test2: makeRun('test2'), lv11: makeRun('lv11') };
+const SLOTS = { test1: makeRun('test1'), test2: makeRun('test2'), lv11: makeRun('lv11'), lv12: makeRun('lv12') };
 
 let state = SLOTS.test1;
 
@@ -217,6 +217,7 @@ function setMenu(open) {
 }
 
 function enterRun(key) {
+  if (INFO.tracklist[key].cardMax) unlockCardsTo(INFO.tracklist[key].cardMax);
   const mouse = state.mouse;
   state.bgmAt = bgm.currentTime;
   const slot = SLOTS[key];
@@ -302,12 +303,12 @@ function drawTip(cx, top, lines) {
 
 canvas.addEventListener('mousemove', e => {
   state.mouse = toLocal(e);
-  if (state.scene === 'menu') menuHover(); else testHover();
+  if (state.scene === 'menu') menuHover(); else if (state.scene === 'testlist') listHover(); else testHover();
 });
 
 canvas.addEventListener('click', e => {
   const p = toLocal(e);
-  if (state.scene === 'menu') menuClick(p); else testClick(p);
+  if (state.scene === 'menu') menuClick(p); else if (state.scene === 'testlist') listClick(p); else testClick(p);
 });
 
 canvas.addEventListener('contextmenu', e => {
@@ -319,7 +320,7 @@ canvas.addEventListener('contextmenu', e => {
 });
 
 window.addEventListener('keydown', e => {
-  if (state.scene === 'menu') return;
+  if (state.scene !== 'game') return;
   testKey(e);
 });
 
@@ -333,6 +334,11 @@ function loop(t) {
   prev = t;
   if (state.scene === 'menu') {
     renderMenu();
+    requestAnimationFrame(loop);
+    return;
+  }
+  if (state.scene === 'testlist') {
+    renderTestList();
     requestAnimationFrame(loop);
     return;
   }

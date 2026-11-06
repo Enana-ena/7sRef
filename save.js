@@ -34,6 +34,7 @@ function clearSaves() {
   cacheErase(PROGRESS_KEY);
   initProgress();
   for (const key of Object.keys(SLOTS)) Object.assign(SLOTS[key], makeRun(key));
+  for (const key of Object.keys(SLOTS)) SLOTS[key].milkInterval = randMilkInterval();
 }
 
 function snapshotRun(s) {

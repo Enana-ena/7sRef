@@ -49,12 +49,30 @@ function unlockCard(id) {
   cacheWrite(PROGRESS_KEY, JSON.stringify(progress));
 }
 
+function unlockCardsTo(n) {
+  progress.cards = [];
+  for (let id = 1; id <= n; id++) progress.cards[id] = true;
+  cacheWrite(PROGRESS_KEY, JSON.stringify(progress));
+}
+
 function netUnlocked() {
   return progress.net === true || INFO.tracklist[state.slot].test === true;
 }
 
+function nextAdvId(id) {
+  let n = null;
+  for (const k of Object.keys(INFO.tracklist)) {
+    const v = INFO.tracklist[k].id;
+    if (typeof v === 'number' && v > id && (n === null || v < n)) n = v;
+  }
+  return n;
+}
+
 function markAdvDone(id) {
-  if (progress.adv.id === id) progress.adv.status = 1;
+  if (progress.adv.id === id) {
+    const n = nextAdvId(id);
+    progress.adv = n === null ? { id, status: 1 } : { id: n, status: 0 };
+  }
   cacheWrite(PROGRESS_KEY, JSON.stringify(progress));
 }
 
