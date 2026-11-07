@@ -160,7 +160,7 @@ function makeRun(key) {
   };
 }
 
-const SLOTS = { test1: makeRun('test1'), test2: makeRun('test2'), lv11: makeRun('lv11'), lv12: makeRun('lv12') };
+const SLOTS = { test1: makeRun('test1'), test2: makeRun('test2'), lv11: makeRun('lv11'), lv12: makeRun('lv12'), lv13: makeRun('lv13'), lv14: makeRun('lv14') };
 
 let state = SLOTS.test1;
 

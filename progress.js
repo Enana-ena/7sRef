@@ -56,7 +56,8 @@ function unlockCardsTo(n) {
 }
 
 function netUnlocked() {
-  return progress.net === true || INFO.tracklist[state.slot].test === true;
+  const lv = INFO.tracklist[state.slot];
+  return (progress.net === true || lv.test === true) && !lv.noNet;
 }
 
 function nextAdvId(id) {
