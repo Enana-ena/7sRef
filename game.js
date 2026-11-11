@@ -121,6 +121,7 @@ function makeRun(key) {
     flights: [],
     plants: [],
     monsters: [],
+    monSeq: 0,
     deaths: [],
     drops: [],
     ashes: [],
@@ -128,6 +129,7 @@ function makeRun(key) {
     reward: null,
     ceremony: null,
     bullets: [],
+    balls: [],
     milks: [],
     effects: [],
     gmilks: [],
@@ -160,7 +162,7 @@ function makeRun(key) {
   };
 }
 
-const SLOTS = { test1: makeRun('test1'), test2: makeRun('test2'), lv11: makeRun('lv11'), lv12: makeRun('lv12'), lv13: makeRun('lv13'), lv14: makeRun('lv14') };
+const SLOTS = { test1: makeRun('test1'), test2: makeRun('test2'), lv11: makeRun('lv11'), lv12: makeRun('lv12'), lv13: makeRun('lv13'), lv14: makeRun('lv14'), test3: makeRun('test3') };
 
 let state = SLOTS.test1;
 

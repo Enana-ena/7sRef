@@ -424,6 +424,45 @@ function bulletHitKind(m, b) {
   return bodyHit(m, b) ? 1 : 0;
 }
 
+function spawnBall(ci, cell) {
+  const card = CARDS[ci];
+  const r = card.info.roll;
+  const s = plantSize(imgs['ptn_' + card.key], card.info.scale);
+  const v = randRange(r.speedMin, r.speedMax) * CFG.grid.cw;
+  state.balls.push({ card: ci, x: cellCenter(cell.row, cell.col).x, y: feetLine(cell.row) - s.h / 2, vx: v, vy: 0, rot: 0, headOn: true, hit: [], lockRow: -1 });
+}
+
+function ballUp(row) {
+  return Math.random() * (CFG.rows - 1) < row;
+}
+
+function ballTurn(b, up) {
+  const r = CARDS[b.card].info.roll;
+  const th = randRange(r.angleMin, r.angleMax) * Math.PI / 180;
+  const v = Math.hypot(b.vx, b.vy);
+  b.vx = v * Math.sin(th);
+  b.vy = (up ? -1 : 1) * v * Math.cos(th);
+}
+
+function ballDamage(m, r, headOn) {
+  const hf = CFG.monster.hitFlash;
+  const mi = INFO.monsters[m.type];
+  m.hitT = hf;
+  if (headOn && m.a2hp) {
+    m.a2t = hf;
+    m.a2hp = Math.max(0, m.a2hp - r.dmgArmor2);
+    if (!m.a2hp) armorDrop(m, mi.armor2);
+    return;
+  }
+  if (m.a1hp) {
+    m.a1t = hf;
+    m.a1hp = Math.max(0, m.a1hp - r.dmgArmor1);
+    if (!m.a1hp) armorDrop(m, mi.armor1);
+    return;
+  }
+  m.hp -= r.dmgBody;
+}
+
 function spawnMonster(row, key, wave) {
   for (let i = 0; i < CFG.rows; i++) {
     if (i === row) {
@@ -435,7 +474,7 @@ function spawnMonster(row, key, wave) {
     }
   }
   const mi = INFO.monsters[key];
-  const m = { row, x: CFG.W + 60, hp: mi.hp, bleedT: 0, hitT: 0, a1t: 0, a2t: 0, type: key, wave, speed: randRange(mi.speedMin, mi.speedMax) };
+  const m = { uid: ++state.monSeq, row, x: CFG.W + 60, hp: mi.hp, bleedT: 0, hitT: 0, a1t: 0, a2t: 0, type: key, wave, speed: randRange(mi.speedMin, mi.speedMax) };
   initArmor(m);
   state.monsters.push(m);
   return m;
@@ -748,6 +787,8 @@ function resetRun() {
   state.reward = null;
   state.ceremony = null;
   state.bullets = [];
+  state.balls = [];
+  state.monSeq = 0;
   state.milks = [];
   state.effects = [];
   state.milk = levelStartMilk(state.slot);
@@ -1296,6 +1337,18 @@ function drawPartner(x, y, alpha, img, scale, flip, flashKey) {
   ctx.globalAlpha = 1;
 }
 
+function drawBall(b) {
+  const card = CARDS[b.card];
+  const img = imgs['ptn_' + card.key];
+  const s = plantSize(img, card.info.scale);
+  ctx.save();
+  ctx.translate(b.x, b.y);
+  ctx.rotate(b.rot);
+  if (card.info.flip) ctx.scale(-1, 1);
+  ctx.drawImage(img, -s.w / 2, -s.h / 2, s.w, s.h);
+  ctx.restore();
+}
+
 function drawShadow(cx, groundY, w) {
   const sh = CFG.shadow;
   ctx.save();
@@ -1786,6 +1839,7 @@ function render() {
   for (const b of state.bullets) {
     drawShadow(b.x, g.y + (b.row + 1) * g.ch - CFG.footMargin, CFG.bulletSize * CFG.shadow.bullet);
   }
+  for (const b of state.balls) { const s = plantSize(imgs['ptn_' + CARDS[b.card].key], CARDS[b.card].info.scale); drawShadow(b.x, b.y + s.h / 2, s.w * CFG.shadow.partner); }
 
   for (const p of state.plants) {
     const card = CARDS[p.card];
@@ -1835,6 +1889,7 @@ function render() {
 
   const bs = CFG.bulletSize;
   for (const b of state.bullets) ctx.drawImage(imgs[b.type] || imgs.tap, b.x - bs / 2, b.y - bs / 2, bs, bs);
+  for (const b of state.balls) drawBall(b);
 
   const ms = milkSize();
   for (const k of state.milks) {
@@ -2136,7 +2191,7 @@ function testClick(p) {
     if (canPlant(cell)) {
       const ci = cardBySlotId(state.belt[state.beltSel].id);
       const info = CARDS[ci].info;
-      state.plants.push({ row: cell.row, col: cell.col, card: ci, atkT: info.bullet ? randAtk(info) : 0, prodT: info.produce ? randRange(info.produce.firstMin, info.produce.firstMax) : 0, lifeT: info.life || 0, placeT: 0, armT: 0, hitT: 0, hp: info.hp });
+      if (info.roll) spawnBall(ci, cell); else state.plants.push({ row: cell.row, col: cell.col, card: ci, atkT: info.bullet ? randAtk(info) : 0, prodT: info.produce ? randRange(info.produce.firstMin, info.produce.firstMax) : 0, lifeT: info.life || 0, placeT: 0, armT: 0, hitT: 0, hp: info.hp });
       state.placeTimes.push(state.clock);
       if (state.placeTimes.length === 1) showHint('做的不错！', 3);
       else if (state.placeTimes.length === 2) showHint('别让中二企鹅到达7sRef！', 3);
@@ -2415,6 +2470,41 @@ function updateGame(raw) {
     } else if (b.x > CFG.W + 60) {
       state.bullets.splice(i, 1);
     }
+  }
+
+  for (let i = state.balls.length - 1; i >= 0; i--) {
+    const b = state.balls[i];
+    const card = CARDS[b.card];
+    const s = plantSize(imgs['ptn_' + card.key], card.info.scale);
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+    b.rot += Math.hypot(b.vx, b.vy) * dt / (s.h / 2);
+    const yB = b.y + s.h / 2;
+    const row = Math.min(CFG.rows - 1, Math.max(0, Math.floor((yB - g.y) / g.ch)));
+    const dist = b.headOn ? CFG.hitDist : card.info.roll.sideDist;
+    if (b.lockRow >= 0 && Math.abs(yB - feetLine(b.lockRow)) > dist) b.lockRow = -1;
+    let hit = null;
+    if (!(b.lockRow >= 0)) {
+      for (const m of state.monsters) {
+        if (b.hit.includes(m.uid)) continue;
+        if (Math.hypot(b.x - m.x, yB - feetLine(m.row)) <= dist) { hit = m; break; }
+      }
+    }
+    if (hit) {
+      ballDamage(hit, card.info.roll, b.headOn);
+      const up = b.headOn ? ballUp(row) : b.vy > 0;
+      b.headOn = false;
+      b.hit.push(hit.uid);
+      b.lockRow = hit.row;
+      ballTurn(b, up);
+    } else if (b.vy < 0 && yB <= feetLine(0)) {
+      b.y = feetLine(0) - s.h / 2;
+      ballTurn(b, false);
+    } else if (b.vy > 0 && yB >= feetLine(CFG.rows - 1)) {
+      b.y = feetLine(CFG.rows - 1) - s.h / 2;
+      ballTurn(b, true);
+    }
+    if (b.x > CFG.W + 60) state.balls.splice(i, 1);
   }
 
   for (const m of state.monsters) {
