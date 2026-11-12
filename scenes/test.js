@@ -2491,6 +2491,14 @@ function updateGame(raw) {
       }
     }
     if (hit) {
+      if (card.info.burst) {
+        // 分数 col 把爆炸中心放在球的连续 x 上，而不是格心
+        const p = { card: b.card, row, col: (b.x - g.x - g.cw / 2) / g.cw };
+        spawnEffect(p);
+        burstDamage(p);
+        state.balls.splice(i, 1);
+        continue;
+      }
       ballDamage(hit, card.info.roll, b.headOn);
       const up = b.headOn ? ballUp(row) : b.vy > 0;
       b.headOn = false;

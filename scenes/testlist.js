@@ -1,9 +1,15 @@
 function listRects() {
-  const keys = Object.keys(INFO.tracklist);
-  const ph = 130 + (keys.length - 1) * 100 + 64 + 36;
-  const panel = { x: (CFG.W - 640) / 2, y: (CFG.H - ph) / 2, w: 640, h: ph };
+  const all = Object.keys(INFO.tracklist);
+  const cols = [all.filter(k => INFO.tracklist[k].test === true), all.filter(k => INFO.tracklist[k].test !== true)];
+  const keys = cols[0].concat(cols[1]);
+  const ph = 130 + (Math.max(cols[0].length, cols[1].length) - 1) * 100 + 64 + 36;
+  const panel = { x: (CFG.W - 800) / 2, y: (CFG.H - ph) / 2, w: 800, h: ph };
   const back = { x: CFG.menu.btnPad, y: CFG.menu.btnY, w: CFG.menu.btnW, h: CFG.menu.btnH };
-  return { keys, panel, back, rows: keys.map((k, i) => ({ x: panel.x + (panel.w - 320) / 2, y: panel.y + 130 + i * 100, w: 320, h: 64 })) };
+  const rows = [];
+  for (let c = 0; c < cols.length; c++) {
+    for (let i = 0; i < cols[c].length; i++) rows.push({ x: panel.x + 60 + c * 360, y: panel.y + 130 + i * 100, w: 320, h: 64 });
+  }
+  return { keys, panel, back, rows };
 }
 
 function listHover() {
