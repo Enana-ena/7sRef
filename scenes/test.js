@@ -463,7 +463,24 @@ function ballDamage(m, r, headOn) {
   m.hp -= r.dmgBody;
 }
 
-function spawnMonster(row, key, wave) {
+function grindDamage(m, r) {
+  const hf = CFG.monster.hitFlash;
+  const mi = INFO.monsters[m.type];
+  m.hitT = hf;
+  m.hp -= r.dmgBody;
+  if (m.a1hp) {
+    m.a1t = hf;
+    m.a1hp = Math.max(0, m.a1hp - r.dmgArmor1);
+    if (!m.a1hp) armorDrop(m, mi.armor1);
+  }
+  if (m.a2hp) {
+    m.a2t = hf;
+    m.a2hp = Math.max(0, m.a2hp - r.dmgArmor2);
+    if (!m.a2hp) armorDrop(m, mi.armor2);
+  }
+}
+
+function spawnMonster(row, key, wave, dest) {
   for (let i = 0; i < CFG.rows; i++) {
     if (i === row) {
       state.rowSecondLast[i] = state.rowLast[i];
@@ -476,7 +493,7 @@ function spawnMonster(row, key, wave) {
   const mi = INFO.monsters[key];
   const m = { uid: ++state.monSeq, row, x: CFG.W + 60, hp: mi.hp, bleedT: 0, hitT: 0, a1t: 0, a2t: 0, type: key, wave, speed: randRange(mi.speedMin, mi.speedMax) };
   initArmor(m);
-  state.monsters.push(m);
+  (dest || state.monsters).push(m);
   return m;
 }
 
@@ -649,7 +666,7 @@ function spawnWave() {
   state.waveHp = 0;
   if (state.wave === lv.waves) {
     for (const key of lv.spawnTable) {
-      const m = spawnMonster(pickRow(), key, state.wave);
+      const m = spawnMonster(pickRow(), key, state.wave, state.spawnQueue);
       sum += INFO.monsters[key].level;
       state.waveHp += monWaveHp(m);
     }
@@ -657,17 +674,19 @@ function spawnWave() {
   if (isBigWave(state.wave)) {
     const seed = Math.min(unit, budget - sum);
     for (let i = 0; i < seed; i++) {
-      const m = spawnMonster(pickRow(), CFG.wave.bigSeed, state.wave);
+      const m = spawnMonster(pickRow(), CFG.wave.bigSeed, state.wave, state.spawnQueue);
       sum += INFO.monsters[CFG.wave.bigSeed].level;
       state.waveHp += monWaveHp(m);
     }
   }
   while (sum < budget) {
     const key = pickMonster(lv.spawnTable.filter(k => INFO.monsters[k].level <= budget - sum));
-    const m = spawnMonster(pickRow(), key, state.wave);
+    const m = spawnMonster(pickRow(), key, state.wave, state.spawnQueue);
     sum += INFO.monsters[key].level;
     state.waveHp += monWaveHp(m);
   }
+  state.monsters.push(state.spawnQueue.shift());
+  state.spawnT = 0;
   if (state.wave === lv.waves) showBanner('最后攻势', CFG.banner.lastHold);
 }
 
@@ -678,11 +697,12 @@ function cutWaveGap(gap) {
 
 function waveCutCheck() {
   if (bigShown() && isBigWave(state.wave + 1)) {
-    if (state.monsters.length === 0) cutWaveGap(CFG.wave.bigCutGap);
+    if (state.monsters.length === 0 && state.spawnQueue.length === 0) cutWaveGap(CFG.wave.bigCutGap);
     return;
   }
   let hp = 0;
   for (const m of state.monsters) if (m.wave === state.wave) hp += monWaveHp(m);
+  for (const m of state.spawnQueue) hp += monWaveHp(m);
   if (hp < state.waveHp * CFG.wave.hpCut) cutWaveGap(CFG.wave.cutGap);
 }
 
@@ -703,7 +723,7 @@ function resultCheck() {
 
 function lastWaveSettled() {
   const lv = INFO.tracklist[state.slot];
-  return state.wave === lv.waves && !state.monsters.some(m => m.wave === lv.waves && m.hp >= monThreshold(m));
+  return state.wave === lv.waves && state.spawnQueue.length === 0 && !state.monsters.some(m => m.wave === lv.waves && m.hp >= monThreshold(m));
 }
 
 function rewardCheck() {
@@ -811,6 +831,8 @@ function resetRun() {
   state.wave = 0;
   state.waveGap = levelFirstGap(state.slot);
   state.waveHp = 0;
+  state.spawnQueue = [];
+  state.spawnT = 0;
   state.bigWarned = false;
   state.banners = [];
   state.hintRule = null;
@@ -1448,12 +1470,14 @@ function drawArmor(m, key, hp, tint, flash) {
   const s = plantSize(imgs['arm_' + key], a.scale);
   const cx = b.x + a.dx;
   const cy = b.y + b.h / 2 + a.dy;
+  const al = CFG.armor.fadeMin + (1 - CFG.armor.fadeMin) * (hp / a.hp);
+  ctx.globalAlpha = al;
   ctx.drawImage(tint ? armorSprite(key) : imgs['arm_' + key], cx - s.w / 2, cy - s.h / 2, s.w, s.h);
   if (flash) {
-    ctx.globalAlpha = CFG.monster.hitAlpha;
+    ctx.globalAlpha = al * CFG.monster.hitAlpha;
     ctx.drawImage(flashSprite('arm_' + key, s), cx - s.w / 2, cy - s.h / 2, s.w, s.h);
-    ctx.globalAlpha = 1;
   }
+  ctx.globalAlpha = 1;
 }
 
 function drawArmors(m) {
@@ -1525,7 +1549,7 @@ function drawDrop(f) {
   let a = 1;
   if (f.t >= d.fall + d.hold) a = Math.max(0, 1 - (f.t - d.fall - d.hold) / d.fade);
   const h = f.target - f.y;
-  ctx.globalAlpha = a;
+  ctx.globalAlpha = a * CFG.armor.fadeMin;
   ctx.drawImage(imgs['arm_' + f.key], f.x + d.run * u - s.w / 2, f.y + h * (d.push * u + (1 - d.push) * u * u) - s.h / 2, s.w, s.h);
   ctx.globalAlpha = 1;
 }
@@ -2136,6 +2160,7 @@ function testClick(p) {
       state.scene = 'menu';
       state.menuOpen = false;
       bgm.pause();
+      stopPickMusic();
       writeRun();
       return;
     }
@@ -2271,12 +2296,19 @@ function updateGame(raw) {
   state.bgmAt = bgm.currentTime;
   const lv = INFO.tracklist[state.slot];
   const stopped = !!(state.reward || state.ceremony);
-  if (!state.opts.noNatural && state.wave < lv.waves && state.clock - state.lastSpawn > state.waveGap && gateOpen(lv.spawnGate)) {
+  if (!state.opts.noNatural && state.wave < lv.waves && state.spawnQueue.length === 0 && state.clock - state.lastSpawn > state.waveGap && gateOpen(lv.spawnGate)) {
     state.lastSpawn = state.clock;
     state.wave++;
     state.waveGap = randWaveGap();
     state.bigWarned = false;
     spawnWave();
+  }
+  if (state.spawnQueue.length) {
+    state.spawnT += dt * 1000;
+    while (state.spawnT >= CFG.wave.spawnGap && state.spawnQueue.length) {
+      state.spawnT -= CFG.wave.spawnGap;
+      state.monsters.push(state.spawnQueue.shift());
+    }
   }
   if (!stopped && isConveyor()) updateBelt(dt);
   if (!stopped && !isConveyor() && state.clock - state.lastMilk > state.milkInterval && gateOpen(lv.milkGate)) {
@@ -2481,6 +2513,13 @@ function updateGame(raw) {
     b.rot += Math.hypot(b.vx, b.vy) * dt / (s.h / 2);
     const yB = b.y + s.h / 2;
     const row = Math.min(CFG.rows - 1, Math.max(0, Math.floor((yB - g.y) / g.ch)));
+    if (card.info.roll.grind) {
+      for (const m of state.monsters) {
+        if (Math.hypot(b.x - m.x, yB - feetLine(m.row)) <= card.info.roll.sideDist) grindDamage(m, card.info.roll);
+      }
+      if (b.x > CFG.W + 60) state.balls.splice(i, 1);
+      continue;
+    }
     const dist = b.headOn ? CFG.hitDist : card.info.roll.sideDist;
     if (b.lockRow >= 0 && Math.abs(yB - feetLine(b.lockRow)) > dist) b.lockRow = -1;
     let hit = null;

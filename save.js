@@ -1,4 +1,4 @@
-const SAVE_KEYS = ['clock', 'wave', 'waveGap', 'waveHp', 'bigWarned', 'banners', 'rowLast', 'rowSecondLast', 'lastSpawn', 'lastMilk', 'milkInterval', 'milkDropped', 'milk', 'milkShown',
+const SAVE_KEYS = ['clock', 'wave', 'waveGap', 'waveHp', 'spawnQueue', 'spawnT', 'bigWarned', 'banners', 'rowLast', 'rowSecondLast', 'lastSpawn', 'lastMilk', 'milkInterval', 'milkDropped', 'milk', 'milkShown',
   'deck', 'cool', 'plants', 'bullets', 'balls', 'milks', 'effects', 'gmilks', 'bgmAt', 'reward',
   'belt', 'beltT', 'beltLast', 'beltLayers', 'beltPresetAt', 'beltSel', 'beltScroll', 'deaths', 'ashes', 'placeTimes', 'milkClicked', 'monSeq'];
 
