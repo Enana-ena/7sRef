@@ -57,7 +57,7 @@ const CFG = {
   banner: { font: 120, color: '#ff4a4a', fade: 0.4, bigHold: 5, lastHold: 1, outline: 8, outlineColor: '#000' },
   pickMusic: { src: 'sounds/Choose Your Seeds.mp3', loopAt: 18 },
   splash: {
-    title: 'sounds/title.mp3', enter: 'sounds/enter-short.mp3',
+    title: 'sounds/title.mp3', enter: 'sounds/enter.mp3',
     bg: 'images/backgrounds/7sRef.png', logo: 'images/others/logo.png',
     titleText: '7sRef', titleFont: 160,
     fadeIn: 1.5, hold: 7, fadeOut: 1.5, switchAt: 12,
@@ -208,7 +208,7 @@ let bgm = musicFor(INFO.bgm);
 
 const winMusic = new Audio(CFG.reward.winMusic);
 
-const clearBgm = musicFor('sounds/clear-short.mp3');
+const clearBgm = musicFor('sounds/clear.mp3');
 
 const menuBgm = musicFor(CFG.splash.enter);
 
