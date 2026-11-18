@@ -1,14 +1,25 @@
-let splash = { phase: 1, t: 0, loaded: false, logoT: 0 };
+let splash = { phase: 1, t: 0, loaded: false, logoT: 0, clicked: false, ready: false };
 
 function splashUpdate(real) {
   splash.t += real;
-  if (splash.phase === 1 && splash.t >= CFG.splash.switchAt) {
-    splash.phase = 2;
-    titleBgm.pause();
-    playMenuBgm();
-    loadAllAssets().then(() => { splash.loaded = true; splash.logoT = 0; });
+  if (splash.phase === 1) {
+    if (!splash.ready && splash.clicked && !titleBgm.paused) splash.ready = true;
+    return;
   }
   if (splash.loaded) splash.logoT += real;
+}
+
+function drawSplashHint(text) {
+  const sp = CFG.splash;
+  const hy = CFG.H / 2 + imgs.splash_logo.height / 2 + sp.hintGap;
+  ctx.font = sp.hintFont + 'px sans-serif';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = sp.hintOutline;
+  ctx.strokeStyle = '#000';
+  ctx.strokeText(text, CFG.W / 2, hy);
+  ctx.fillStyle = '#fff';
+  ctx.fillText(text, CFG.W / 2, hy);
+  ctx.lineWidth = 1;
 }
 
 function renderSplash() {
@@ -18,16 +29,12 @@ function renderSplash() {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   if (splash.phase === 1) {
-    const t = splash.t;
-    let a = 0;
-    if (t < sp.fadeIn) a = t / sp.fadeIn;
-    else if (t < sp.fadeIn + sp.hold) a = 1;
-    else if (t < sp.fadeIn + sp.hold + sp.fadeOut) a = 1 - (t - sp.fadeIn - sp.hold) / sp.fadeOut;
-    ctx.globalAlpha = a;
+    ctx.globalAlpha = Math.min(1, splash.t / sp.fadeIn);
     ctx.fillStyle = '#fff';
     ctx.font = 'bold ' + sp.titleFont + 'px sans-serif';
     ctx.fillText(sp.titleText, CFG.W / 2, CFG.H / 2);
     ctx.globalAlpha = 1;
+    if (splash.ready) drawSplashHint(sp.startText);
     return;
   }
   const bg = imgs.splash_bg;
@@ -42,15 +49,7 @@ function renderSplash() {
   const logo = imgs.splash_logo;
   ctx.globalAlpha = Math.min(1, splash.logoT / sp.logoFade);
   ctx.drawImage(logo, CFG.W / 2 - logo.width / 2, CFG.H / 2 - logo.height / 2);
-  const hy = CFG.H / 2 + logo.height / 2 + sp.hintGap;
-  ctx.font = sp.hintFont + 'px sans-serif';
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = sp.hintOutline;
-  ctx.strokeStyle = '#000';
-  ctx.strokeText(sp.hintText, CFG.W / 2, hy);
-  ctx.fillStyle = '#fff';
-  ctx.fillText(sp.hintText, CFG.W / 2, hy);
-  ctx.lineWidth = 1;
+  drawSplashHint(sp.hintText);
   ctx.globalAlpha = 1;
 }
 
@@ -59,6 +58,15 @@ function splashHover() {
 }
 
 function splashClick() {
+  if (splash.phase === 1) {
+    splash.clicked = true;
+    if (!splash.ready) return;
+    splash.phase = 2;
+    titleBgm.pause();
+    playMenuBgm();
+    loadAllAssets().then(() => { splash.loaded = true; splash.logoT = 0; });
+    return;
+  }
   if (!splash.loaded) return;
   state.scene = 'menu';
 }
