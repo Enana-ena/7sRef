@@ -328,12 +328,27 @@ window.addEventListener('keydown', e => {
   testKey(e);
 });
 
+let bgmTimer = null;
+
+// 每帧按剩余时间重排定时器，到点精确 seek；暂停/回跳/换关由下一帧自动重排
+function armBgmLoop(bl) {
+  clearTimeout(bgmTimer);
+  const t = bgm.currentTime;
+  if (t >= bl.at) { bgm.currentTime = bl.to; return; }
+  bgmTimer = setTimeout(function fire() {
+    if (bgm.paused || INFO.tracklist[state.slot].bgmLoop !== bl) return;
+    const ct = bgm.currentTime;
+    if (ct >= bl.at) bgm.currentTime = bl.to;
+    else bgmTimer = setTimeout(fire, (bl.at - ct) * 1000);
+  }, (bl.at - t) * 1000);
+}
+
 let prev = performance.now();
 
 function loop(t) {
   if (!pickBgm.paused && pickBgm.currentTime >= CFG.pickMusic.loopAt) pickBgm.currentTime = pickBgm.currentTime % CFG.pickMusic.loopAt;
   const bl = INFO.tracklist[state.slot].bgmLoop;
-  if (bl && !bgm.paused && bgm.currentTime >= bl.at) bgm.currentTime = bl.to;
+  if (bl && !bgm.paused) armBgmLoop(bl); else clearTimeout(bgmTimer);
   const raw = Math.min(50, t - prev) / 1000;
   prev = t;
   if (state.scene === 'menu') {
