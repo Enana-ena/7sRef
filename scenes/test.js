@@ -172,9 +172,10 @@ function spawnEffect(p) {
 function burstDamage(p) {
   const b = CARDS[p.card].info.burst;
   const g = CFG.grid;
-  const x0 = g.x + (p.col - b.radius) * g.cw;
+  const wm = b.widthMul || 1;
+  const x0 = g.x + (p.col + 0.5 - (b.radius + 0.5) * wm) * g.cw;
   const y0 = g.y + (p.row - b.radius) * g.ch;
-  const x1 = x0 + (b.radius * 2 + 1) * g.cw;
+  const x1 = x0 + (b.radius * 2 + 1) * wm * g.cw;
   const y1 = y0 + (b.radius * 2 + 1) * g.ch;
   for (const m of state.monsters) {
     const bx = hitBox(m);

@@ -176,7 +176,7 @@ const INFO = {
       ash: true,
       flip: true,
       roll: { speedMin: 2.5, speedMax: 4.0 },
-      burst: { damage: 1800, radius: 1 },
+      burst: { damage: 1800, radius: 1, widthMul: 0.8 },
       effect: { img: 'images/others/cp.png', grow: 0.2, hold: 0.8, fade: 0.2, scaleFrom: 1.5, scaleTo: 2.5 },
       cardImg: 'images/cards/card_らん_red.png',
       ptnImg: 'images/partners/ptn_らん_red.png',
