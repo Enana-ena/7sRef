@@ -316,6 +316,7 @@ const INFO = {
       scale: 1.00,
       milk: null,
       unlock: null,
+      desc: '使场上一个已存在的伙伴立刻消失',
     },
   },
   tracklist: {

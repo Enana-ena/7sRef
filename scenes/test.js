@@ -2112,6 +2112,7 @@ function testClick(p) {
   if (state.result) {
     if (inRect(p, ui.loseBack)) {
       state.scene = 'menu';
+      playMenuBgm();
       state.result = null;
       bgm.pause();
       writeRun();
@@ -2127,6 +2128,7 @@ function testClick(p) {
   if (state.resumeAsk) {
     if (inRect(p, ui.resumeBack)) {
       state.scene = 'menu';
+      playMenuBgm();
       state.resumeAsk = false;
       writeRun();
     } else if (inRect(p, ui.resumeRestart)) {
@@ -2159,6 +2161,7 @@ function testClick(p) {
   if (state.menuOpen) {
     if (inRect(p, ui.quitBtn)) {
       state.scene = 'menu';
+      playMenuBgm();
       state.menuOpen = false;
       bgm.pause();
       stopPickMusic();
@@ -2604,9 +2607,10 @@ function updateGame(raw) {
   if (state.ceremony) {
     state.ceremony.t += dt;
     if (state.ceremony.t >= CFG.reward.cer.dur) {
+      const key = state.ceremony.key, slot = state.slot;
       resetRun();
       writeRun();
-      state.scene = 'menu';
+      openRewardPage(key, slot);
     }
   }
 }

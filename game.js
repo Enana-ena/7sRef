@@ -34,6 +34,15 @@ const CFG = {
     halo: { radius: 1.1, alpha: 0.55, color: '255,225,120' },
     burst: { dur: 0.2, hold: 0.2, radius: 130 },
     cer: { dur: 5, fly: 3, white: 2, scaleTo: 3, glowFrom: 260, glowTo: 1180, glowAlpha: 0.55, color: '255,255,255' },
+    page: {
+      bg: 'images/others/UI_Base.png',
+      charaLeft: 'images/others/chara-left.png',
+      charaRight: 'images/others/chara-right.png',
+      panel: { w: 900, h: 780, fill: 'rgba(70,50,25,0.65)', border: 'rgba(255,255,255,0.5)', borderW: 2, r: 24 },
+      topFont: 44, topDy: 70, imgH: 460, imgDy: 330, descFont: 32, descDy: 600,
+      btn: { w: 320, h: 64, dy: 680 },
+      advTop: '有新的旅行伙伴加入了哟~', advBtn: '下一关', testBtn: '返回',
+    },
   },
   artPad: { 'images/enemies/enm_chunipenguin.png': [58, 0, 101, 36] },
   bulletSize: 64,
@@ -47,6 +56,14 @@ const CFG = {
   gmilk: { scale: 0.8, speed: 800 },
   banner: { font: 120, color: '#ff4a4a', fade: 0.4, bigHold: 5, lastHold: 1, outline: 8, outlineColor: '#000' },
   pickMusic: { src: 'sounds/Choose Your Seeds.mp3', loopAt: 18 },
+  splash: {
+    title: 'sounds/title.mp3', enter: 'sounds/enter.mp3',
+    bg: 'images/backgrounds/7sRef.png', logo: 'images/others/logo.png',
+    titleText: '7sRef', titleFont: 160,
+    fadeIn: 1.5, hold: 7, fadeOut: 1.5, switchAt: 12,
+    loadText: '正在加载...', loadFont: 40,
+    logoFade: 1, hintText: '-按任意位置继续-', hintFont: 30, hintOutline: 4, hintGap: 24,
+  },
   hint: { font: 80, lineH: 1.5, barAlpha: 0.3, textAlpha: 0.7, barColor: '#a0a0a0', textColor: '#ffffff', outline: 8, outlineColor: '#000000', centerY: 0.75 },
   bgBlur: 12,
 };
@@ -191,6 +208,13 @@ let bgm = musicFor(INFO.bgm);
 
 const winMusic = new Audio(CFG.reward.winMusic);
 
+const clearBgm = musicFor('sounds/clear.mp3');
+
+const menuBgm = musicFor(CFG.splash.enter);
+
+const titleBgm = musicFor(CFG.splash.title);
+titleBgm.loop = false;
+
 function playBgm() {
   const p = bgm.play();
   if (p && p.catch) p.catch(() => {});
@@ -214,6 +238,20 @@ function stopPickMusic() {
   pickBgm.pause();
 }
 
+for (const src of [INFO.bgm, ...Object.values(INFO.tracklist).map(l => l.bgm), CFG.pickMusic.src, CFG.splash.title, CFG.splash.enter]) musicFor(src);
+
+let pendingMusic = null;
+
+function playMusic(a) {
+  const p = a.play();
+  if (p && p.catch) p.catch(() => { pendingMusic = a; });
+}
+
+function playMenuBgm() {
+  menuBgm.currentTime = 0;
+  playMusic(menuBgm);
+}
+
 function setMenu(open) {
   state.menuOpen = open;
   if (open) bgm.pause();
@@ -221,6 +259,7 @@ function setMenu(open) {
 }
 
 function enterRun(key) {
+  menuBgm.pause();
   if (INFO.tracklist[key].cardMax) unlockCardsTo(INFO.tracklist[key].cardMax);
   const mouse = state.mouse;
   state.bgmAt = bgm.currentTime;
@@ -307,12 +346,13 @@ function drawTip(cx, top, lines) {
 
 canvas.addEventListener('mousemove', e => {
   state.mouse = toLocal(e);
-  if (state.scene === 'menu') menuHover(); else if (state.scene === 'testlist') listHover(); else testHover();
+  if (state.scene === 'splash') splashHover(); else if (state.scene === 'menu') menuHover(); else if (state.scene === 'testlist') listHover(); else if (state.scene === 'reward') rewardHover(); else testHover();
 });
 
 canvas.addEventListener('click', e => {
+  if (pendingMusic) { const a = pendingMusic; pendingMusic = null; if (a.paused) playMusic(a); }
   const p = toLocal(e);
-  if (state.scene === 'menu') menuClick(p); else if (state.scene === 'testlist') listClick(p); else testClick(p);
+  if (state.scene === 'splash') splashClick(); else if (state.scene === 'menu') menuClick(p); else if (state.scene === 'testlist') listClick(p); else if (state.scene === 'reward') rewardClick(p); else testClick(p);
 });
 
 canvas.addEventListener('contextmenu', e => {
@@ -350,7 +390,14 @@ function loop(t) {
   const bl = INFO.tracklist[state.slot].bgmLoop;
   if (bl && !bgm.paused) armBgmLoop(bl); else clearTimeout(bgmTimer);
   const raw = Math.min(50, t - prev) / 1000;
+  const real = (t - prev) / 1000;
   prev = t;
+  if (state.scene === 'splash') {
+    splashUpdate(real);
+    renderSplash();
+    requestAnimationFrame(loop);
+    return;
+  }
   if (state.scene === 'menu') {
     renderMenu();
     requestAnimationFrame(loop);
@@ -358,6 +405,11 @@ function loop(t) {
   }
   if (state.scene === 'testlist') {
     renderTestList();
+    requestAnimationFrame(loop);
+    return;
+  }
+  if (state.scene === 'reward') {
+    renderReward();
     requestAnimationFrame(loop);
     return;
   }
@@ -372,28 +424,42 @@ function loop(t) {
   requestAnimationFrame(loop);
 }
 
+function loadAllAssets() {
+  return Promise.all([
+    loadImage('bg', 'images/backgrounds/test.png'),
+    ...Object.keys(INFO.tracklist).map(k => loadImage('bg_' + k, INFO.tracklist[k].bg)),
+    ...Object.keys(INFO.bullets).map(k => loadImage(k, INFO.bullets[k].img)),
+    loadImage('milk', INFO.milk.img),
+    loadImage('net_err', 'images/others/net_err.png'),
+    loadImage('reward_base', CFG.reward.page.bg),
+    loadImage('chara_left', CFG.reward.page.charaLeft),
+    loadImage('chara_right', CFG.reward.page.charaRight),
+    loadImage('golden_milk', 'images/others/golden_milk.png'),
+    loadImage('flag_meter', 'images/others/FlagMeter.png'),
+    loadImage('sync', 'images/others/sync.png'),
+    loadImage('icetrap', CFG.monster.freezeTrap.img),
+    ...CFG.meter.ranks.map(r => loadImage('allclear_' + r, 'images/others/UI_MSS_Allclear_Icon_' + r + '.png')),
+    ...Object.keys(INFO.monsters).map(k => loadImage('enm_' + k, INFO.monsters[k].img)),
+    ...Object.keys(INFO.armors).map(k => loadImage('arm_' + k, INFO.armors[k].img)),
+    ...Object.keys(INFO.rewards).map(k => loadImage('rew_' + k, INFO.rewards[k].img)),
+    ...CARDS.map(c => loadImage('card_' + c.key, c.info.cardImg)),
+    ...CARDS.map(c => loadImage('ptn_' + c.key, c.info.ptnImg)),
+    ...CARDS.filter(c => c.info.effect).map(c => loadImage('eff_' + c.key, c.info.effect.img)),
+    ...CARDS.filter(c => c.info.place).map(c => loadImage('plc_' + c.key, c.info.place.img)),
+  ]).then(() => {
+    for (const s of Object.values(SLOTS)) {
+      s.milkInterval = randMilkInterval();
+      resetGmilks(s);
+    }
+  });
+}
+
 Promise.all([
-  loadImage('bg', 'images/backgrounds/test.png'),
-  ...Object.keys(INFO.tracklist).map(k => loadImage('bg_' + k, INFO.tracklist[k].bg)),
-  ...Object.keys(INFO.bullets).map(k => loadImage(k, INFO.bullets[k].img)),
-  loadImage('milk', INFO.milk.img),
-  loadImage('net_err', 'images/others/net_err.png'),
-  loadImage('golden_milk', 'images/others/golden_milk.png'),
-  loadImage('flag_meter', 'images/others/FlagMeter.png'),
-  loadImage('sync', 'images/others/sync.png'),
-  loadImage('icetrap', CFG.monster.freezeTrap.img),
-  ...CFG.meter.ranks.map(r => loadImage('allclear_' + r, 'images/others/UI_MSS_Allclear_Icon_' + r + '.png')),
-  ...Object.keys(INFO.monsters).map(k => loadImage('enm_' + k, INFO.monsters[k].img)),
-  ...Object.keys(INFO.armors).map(k => loadImage('arm_' + k, INFO.armors[k].img)),
-  ...Object.keys(INFO.rewards).map(k => loadImage('rew_' + k, INFO.rewards[k].img)),
-  ...CARDS.map(c => loadImage('card_' + c.key, c.info.cardImg)),
-  ...CARDS.map(c => loadImage('ptn_' + c.key, c.info.ptnImg)),
-  ...CARDS.filter(c => c.info.effect).map(c => loadImage('eff_' + c.key, c.info.effect.img)),
-  ...CARDS.filter(c => c.info.place).map(c => loadImage('plc_' + c.key, c.info.place.img)),
+  loadImage('splash_bg', CFG.splash.bg),
+  loadImage('splash_logo', CFG.splash.logo),
 ]).then(() => {
-  for (const s of Object.values(SLOTS)) {
-    s.milkInterval = randMilkInterval();
-    resetGmilks(s);
-  }
+  state.scene = 'splash';
+  titleBgm.currentTime = 0;
+  playMusic(titleBgm);
   requestAnimationFrame(loop);
 });
