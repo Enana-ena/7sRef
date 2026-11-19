@@ -718,6 +718,7 @@ function resultCheck() {
   if (state.result) return;
   if (state.monsters.some(m => { const b = monsterBox(m); return b.x - b.w / 2 <= 0; })) {
     state.result = 'lose';
+    playEndMusic();
     return;
   }
 }

@@ -209,6 +209,8 @@ let bgm = musicFor(INFO.bgm);
 
 const winMusic = new Audio(CFG.reward.winMusic);
 
+const endBgm = new Audio('sounds/end.mp3');
+
 const clearBgm = musicFor('sounds/clear.mp3');
 
 const menuBgm = musicFor(CFG.splash.enter);
@@ -224,6 +226,12 @@ function playBgm() {
 function playWinMusic() {
   winMusic.currentTime = 0;
   const p = winMusic.play();
+  if (p && p.catch) p.catch(() => {});
+}
+
+function playEndMusic() {
+  endBgm.currentTime = 0;
+  const p = endBgm.play();
   if (p && p.catch) p.catch(() => {});
 }
 
