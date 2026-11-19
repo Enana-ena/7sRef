@@ -718,6 +718,7 @@ function resultCheck() {
   if (state.result) return;
   if (state.monsters.some(m => { const b = monsterBox(m); return b.x - b.w / 2 <= 0; })) {
     state.result = 'lose';
+    bgm.pause();
     playEndMusic();
     return;
   }
@@ -2116,8 +2117,10 @@ function testClick(p) {
       playMenuBgm();
       state.result = null;
       bgm.pause();
+      endBgm.pause();
       writeRun();
     } else if (inRect(p, ui.loseRetry)) {
+      endBgm.pause();
       resetRun();
       beginRun();
       writeRun();
